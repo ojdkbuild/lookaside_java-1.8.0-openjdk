@@ -439,6 +439,9 @@ void InstanceKlass::deallocate_contents(ClassLoaderData* loader_data) {
     if (!constants()->is_shared()) {
       MetadataFactory::free_metadata(loader_data, constants());
     }
+    // Delete any cached resolution errors for the constant pool
+    SystemDictionary::delete_resolution_error(constants());
+
     set_constants(NULL);
   }
 
@@ -1568,6 +1571,21 @@ Method* InstanceKlass::uncached_lookup_method(Symbol* name, Symbol* signature, M
   }
   return NULL;
 }
+
+#ifdef ASSERT
+// search through class hierarchy and return true if this class or
+// one of the superclasses was redefined
+bool InstanceKlass::has_redefined_this_or_super() const {
+  const InstanceKlass* klass = this;
+  while (klass != NULL) {
+    if (klass->has_been_redefined()) {
+      return true;
+    }
+    klass = InstanceKlass::cast(klass->super());
+  }
+  return false;
+}
+#endif
 
 // lookup a method in the default methods list then in all transitive interfaces
 // Do NOT return private or static methods
@@ -3016,6 +3034,23 @@ static void print_vtable(intptr_t* start, int len, outputStream* st) {
 void InstanceKlass::print_on(outputStream* st) const {
   assert(is_klass(), "must be klass");
   Klass::print_on(st);
+
+  st->print(BULLET"primary supers:    ");
+  for (juint i = 0; i < Klass::primary_super_limit(); i++) {
+    if (_primary_supers[i]) {
+      _primary_supers[i]->name()->print_value_on(st);
+      st->print("   ");
+    }
+  }
+  st->cr();
+
+  st->print(BULLET"secondary supers:    ");
+  int cnt = secondary_supers()->length();
+  for (int i = 0; i < cnt; i++) {
+    secondary_supers()->at(i)->print_value_on(st);
+      st->print("   ");
+  }
+  st->cr();
 
   st->print(BULLET"instance size:     %d", size_helper());                        st->cr();
   st->print(BULLET"klass size:        %d", size());                               st->cr();

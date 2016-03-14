@@ -4421,9 +4421,15 @@ void ClassFileParser::set_precomputed_flags(instanceKlassHandle k) {
   Method* m = k->lookup_method(vmSymbols::finalize_method_name(),
                                  vmSymbols::void_method_signature());
   if (m != NULL && !m->is_empty_method()) {
-    f = true;
+      f = true;
   }
-  assert(f == k->has_finalizer(), "inconsistent has_finalizer");
+
+  // Spec doesn't prevent agent from redefinition of empty finalizer.
+  // Despite the fact that it's generally bad idea and redefined finalizer
+  // will not work as expected we shouldn't abort vm in this case
+  if (!k->has_redefined_this_or_super()) {
+    assert(f == k->has_finalizer(), "inconsistent has_finalizer");
+  }
 #endif
 
   // Check if this klass supports the java.lang.Cloneable interface
@@ -4721,8 +4727,9 @@ bool ClassFileParser::has_illegal_visibility(jint flags) {
 
 bool ClassFileParser::is_supported_version(u2 major, u2 minor) {
   u2 max_version =
-    JDK_Version::is_gte_jdk17x_version() ? JAVA_MAX_SUPPORTED_VERSION :
-    (JDK_Version::is_gte_jdk16x_version() ? JAVA_6_VERSION : JAVA_1_5_VERSION);
+    JDK_Version::is_gte_jdk18x_version() ? JAVA_MAX_SUPPORTED_VERSION :
+    (JDK_Version::is_gte_jdk17x_version() ? JAVA_7_VERSION :
+     (JDK_Version::is_gte_jdk16x_version() ? JAVA_6_VERSION : JAVA_1_5_VERSION));
   return (major >= JAVA_MIN_SUPPORTED_VERSION) &&
          (major <= max_version) &&
          ((major != max_version) ||
