@@ -1,0 +1,4 @@
+repo: 6ce5f4757bde08f7470cbb9f0b46da8f2f3d4f56
+node: 8f260851e05111c39353a6a4d06e752e7c86ec31
+branch: default
+tag: jdk8u60-b27
