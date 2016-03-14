@@ -134,7 +134,7 @@ AC_DEFUN_ONCE([JDKOPT_SETUP_JVM_VARIANTS],
   fi
 
   # Replace the commas with AND for use in the build directory name.
-  ANDED_JVM_VARIANTS=`$ECHO "$JVM_VARIANTS" | $SED -e 's/^,//' -e 's/,$//' -e 's/,/AND/'`
+  ANDED_JVM_VARIANTS=`$ECHO "$JVM_VARIANTS" | $SED -e 's/^,//' -e 's/,$//' -e 's/,/AND/g'`
   COUNT_VARIANTS=`$ECHO "$JVM_VARIANTS" | $SED -e 's/server,/1/' -e 's/client,/1/' -e 's/minimal1,/1/' -e 's/kernel,/1/' -e 's/zero,/1/' -e 's/zeroshark,/1/' -e 's/core,/1/'`
   if test "x$COUNT_VARIANTS" != "x,1"; then
     BUILDING_MULTIPLE_JVM_VARIANTS=yes
@@ -510,7 +510,15 @@ AC_DEFUN_ONCE([JDKOPT_SETUP_JDK_VERSION_NUMBERS],
   AC_SUBST(MACOSX_BUNDLE_NAME_BASE)
   AC_SUBST(MACOSX_BUNDLE_ID_BASE)
 
-  COPYRIGHT_YEAR=`date +'%Y'`
+  AC_ARG_WITH(copyright-year, [AS_HELP_STRING([--with-copyright-year],
+      [Set copyright year value for build @<:@current year@:>@])])
+  if test "x$with_copyright_year" = xyes; then
+    AC_MSG_ERROR([Copyright year must have a value])
+  elif test "x$with_copyright_year" != x; then
+    COPYRIGHT_YEAR="$with_copyright_year"
+  else
+    COPYRIGHT_YEAR=`date +'%Y'`
+  fi
   AC_SUBST(COPYRIGHT_YEAR)
 
   if test "x$JDK_UPDATE_VERSION" != x; then
