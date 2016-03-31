@@ -394,7 +394,7 @@ void InterpreterGenerator::generate_counter_incr(
       __ br(Assembler::LT, *profile_method_continue);
 
       // if no method data exists, go to profile_method
-      __ test_method_data_pointer(r0, *profile_method);
+      __ test_method_data_pointer(rscratch2, *profile_method);
     }
 
     {
@@ -524,7 +524,7 @@ void InterpreterGenerator::generate_stack_overflow_check(void) {
   // Note: the restored frame is not necessarily interpreted.
   // Use the shared runtime version of the StackOverflowError.
   assert(StubRoutines::throw_StackOverflowError_entry() != NULL, "stub not yet generated");
-  __ b(RuntimeAddress(StubRoutines::throw_StackOverflowError_entry()));
+  __ far_jump(RuntimeAddress(StubRoutines::throw_StackOverflowError_entry()));
 
   // all done with frame size check
   __ bind(after_frame_check);

@@ -98,20 +98,18 @@ int MacroAssembler::pd_patch_instruction_size(address branch, address target) {
       unsigned offset_lo = dest & 0xfff;
       offset = adr_page - pc_page;
 
-      // We handle 3 types of PC relative addressing
+      // We handle 4 types of PC relative addressing
       //   1 - adrp    Rx, target_page
       //       ldr/str Ry, [Rx, #offset_in_page]
       //   2 - adrp    Rx, target_page
       //       add     Ry, Rx, #offset_in_page
       //   3 - adrp    Rx, target_page (page aligned reloc, offset == 0)
-      // In the first 2 cases we must check that Rx is the same in the adrp and the
-      // subsequent ldr/str or add instruction. Otherwise we could accidentally end
-      // up treating a type 3 relocation as a type 1 or 2 just because it happened
-      // to be followed by a random unrelated ldr/str or add instruction.
-      //
-      // In the case of a type 3 relocation, we know that these are only generated
-      // for the safepoint polling page, or for the card type byte map base so we
-      // assert as much and of course that the offset is 0.
+      //       movk    Rx, #imm16<<32
+      //   4 - adrp    Rx, target_page (page aligned reloc, offset == 0)
+      // In the first 3 cases we must check that Rx is the same in the adrp and the
+      // subsequent ldr/str, add or movk instruction. Otherwise we could accidentally end
+      // up treating a type 4 relocation as a type 1, 2 or 3 just because it happened
+      // to be followed by a random unrelated ldr/str, add or movk instruction.
       //
       unsigned insn2 = ((unsigned*)branch)[1];
       if (Instruction_aarch64::extract(insn2, 29, 24) == 0b111001 &&
@@ -130,13 +128,13 @@ int MacroAssembler::pd_patch_instruction_size(address branch, address target) {
 	Instruction_aarch64::patch(branch + sizeof (unsigned),
 				   21, 10, offset_lo);
 	instructions = 2;
-      } else {
-	assert((jbyte *)target ==
-		((CardTableModRefBS*)(Universe::heap()->barrier_set()))->byte_map_base ||
-               target == StubRoutines::crc_table_addr() ||
-               (address)target == os::get_polling_page(),
-	       "adrp must be polling page or byte map base");
-	assert(offset_lo == 0, "offset must be 0 for polling page or byte map base");
+      } else if (Instruction_aarch64::extract(insn2, 31, 21) == 0b11110010110 &&
+                   Instruction_aarch64::extract(insn, 4, 0) ==
+                     Instruction_aarch64::extract(insn2, 4, 0)) {
+        // movk #imm16<<32
+        Instruction_aarch64::patch(branch + 4, 20, 5, (uint64_t)target >> 32);
+        offset &= (1<<20)-1;
+        instructions = 2;
       }
     }
     int offset_lo = offset & 3;
@@ -151,7 +149,7 @@ int MacroAssembler::pd_patch_instruction_size(address branch, address target) {
     Instruction_aarch64::patch(branch, 20, 5, dest & 0xffff);
     Instruction_aarch64::patch(branch+4, 20, 5, (dest >>= 16) & 0xffff);
     Instruction_aarch64::patch(branch+8, 20, 5, (dest >>= 16) & 0xffff);
-    assert(pd_call_destination(branch) == target, "should be");
+    assert(target_addr_for_insn(branch) == target, "should be");
     instructions = 3;
   } else if (Instruction_aarch64::extract(insn, 31, 22) == 0b1011100101 &&
              Instruction_aarch64::extract(insn, 4, 0) == 0b11111) {
@@ -219,20 +217,16 @@ address MacroAssembler::target_addr_for_insn(address insn_addr, unsigned insn) {
       // Return the target address for the following sequences
       //   1 - adrp    Rx, target_page
       //       ldr/str Ry, [Rx, #offset_in_page]
-      //   [ 2 - adrp    Rx, target_page         ] Not handled
-      //   [    add     Ry, Rx, #offset_in_page  ]
+      //   2 - adrp    Rx, target_page
+      //       add     Ry, Rx, #offset_in_page
       //   3 - adrp    Rx, target_page (page aligned reloc, offset == 0)
+      //       movk    Rx, #imm12<<32
+      //   4 - adrp    Rx, target_page (page aligned reloc, offset == 0)
       //
-      // In the case of type 1 we check that the register is the same and
+      // In the first two cases  we check that the register is the same and
       // return the target_page + the offset within the page.
-      //
       // Otherwise we assume it is a page aligned relocation and return
-      // the target page only. The only cases this is generated is for
-      // the safepoint polling page or for the card table byte map base so
-      // we assert as much.
-      //
-      // Note: Strangely, we do not handle 'type 2' relocation (adrp followed
-      // by add) which is handled in pd_patch_instruction above.
+      // the target page only.
       //
       unsigned insn2 = ((unsigned*)insn_addr)[1];
       if (Instruction_aarch64::extract(insn2, 29, 24) == 0b111001 &&
@@ -242,11 +236,19 @@ address MacroAssembler::target_addr_for_insn(address insn_addr, unsigned insn) {
 	unsigned int byte_offset = Instruction_aarch64::extract(insn2, 21, 10);
 	unsigned int size = Instruction_aarch64::extract(insn2, 31, 30);
 	return address(target_page + (byte_offset << size));
+      } else if (Instruction_aarch64::extract(insn2, 31, 22) == 0b1001000100 &&
+                Instruction_aarch64::extract(insn, 4, 0) ==
+                        Instruction_aarch64::extract(insn2, 4, 0)) {
+        // add (immediate)
+        unsigned int byte_offset = Instruction_aarch64::extract(insn2, 21, 10);
+        return address(target_page + byte_offset);
       } else {
-	assert((jbyte *)target_page ==
-		((CardTableModRefBS*)(Universe::heap()->barrier_set()))->byte_map_base ||
-               (address)target_page == os::get_polling_page(),
-	       "adrp must be polling page or byte map base");
+        if (Instruction_aarch64::extract(insn2, 31, 21) == 0b11110010110  &&
+               Instruction_aarch64::extract(insn, 4, 0) ==
+                 Instruction_aarch64::extract(insn2, 4, 0)) {
+          target_page = (target_page & 0xffffffff) |
+                         ((uint64_t)Instruction_aarch64::extract(insn2, 20, 5) << 32);
+        }
 	return (address)target_page;
       }
     } else {
@@ -351,6 +353,42 @@ void MacroAssembler::set_last_Java_frame(Register last_java_sp,
     InstructionMark im(this);
     L.add_patch_at(code(), locator());
     set_last_Java_frame(last_java_sp, last_java_fp, (address)NULL, scratch);
+  }
+}
+
+void MacroAssembler::far_call(Address entry, CodeBuffer *cbuf, Register tmp) {
+  assert(ReservedCodeCacheSize < 4*G, "branch out of range");
+  assert(CodeCache::find_blob(entry.target()) != NULL,
+         "destination of far call not found in code cache");
+  if (far_branches()) {
+    unsigned long offset;
+    // We can use ADRP here because we know that the total size of
+    // the code cache cannot exceed 2Gb.
+    adrp(tmp, entry, offset);
+    add(tmp, tmp, offset);
+    if (cbuf) cbuf->set_insts_mark();
+    blr(tmp);
+  } else {
+    if (cbuf) cbuf->set_insts_mark();
+    bl(entry);
+  }
+}
+
+void MacroAssembler::far_jump(Address entry, CodeBuffer *cbuf, Register tmp) {
+  assert(ReservedCodeCacheSize < 4*G, "branch out of range");
+  assert(CodeCache::find_blob(entry.target()) != NULL,
+         "destination of far call not found in code cache");
+  if (far_branches()) {
+    unsigned long offset;
+    // We can use ADRP here because we know that the total size of
+    // the code cache cannot exceed 2Gb.
+    adrp(tmp, entry, offset);
+    add(tmp, tmp, offset);
+    if (cbuf) cbuf->set_insts_mark();
+    br(tmp);
+  } else {
+    if (cbuf) cbuf->set_insts_mark();
+    b(entry);
   }
 }
 
@@ -627,14 +665,84 @@ void MacroAssembler::call_VM_helper(Register oop_result, address entry_point, in
   call_VM_base(oop_result, noreg, noreg, entry_point, number_of_arguments, check_exceptions);
 }
 
-void MacroAssembler::call(Address entry) {
-  if (true // reachable(entry)
-      ) {
-    bl(entry);
-  } else {
-    lea(rscratch1, entry);
-    blr(rscratch1);
+// Maybe emit a call via a trampoline.  If the code cache is small
+// trampolines won't be emitted.
+
+void MacroAssembler::trampoline_call(Address entry, CodeBuffer *cbuf) {
+  assert(entry.rspec().type() == relocInfo::runtime_call_type
+         || entry.rspec().type() == relocInfo::opt_virtual_call_type
+         || entry.rspec().type() == relocInfo::static_call_type
+         || entry.rspec().type() == relocInfo::virtual_call_type, "wrong reloc type");
+
+  unsigned int start_offset = offset();
+#ifdef COMPILER2
+  if (far_branches() && !Compile::current()->in_scratch_emit_size()) {
+    emit_trampoline_stub(offset(), entry.target());
   }
+#endif
+
+  if (cbuf) cbuf->set_insts_mark();
+  relocate(entry.rspec());
+#ifdef COMPILER2
+  if (!far_branches()) {
+    bl(entry.target());
+  } else {
+    bl(pc());
+  }
+#else
+    bl(entry.target());
+#endif
+}
+
+
+// Emit a trampoline stub for a call to a target which is too far away.
+//
+// code sequences:
+//
+// call-site:
+//   branch-and-link to <destination> or <trampoline stub>
+//
+// Related trampoline stub for this call site in the stub section:
+//   load the call target from the constant pool
+//   branch (LR still points to the call site above)
+
+void MacroAssembler::emit_trampoline_stub(int insts_call_instruction_offset,
+                                             address dest) {
+#ifdef COMPILER2
+  address stub = start_a_stub(Compile::MAX_stubs_size/2);
+  if (stub == NULL) {
+    start_a_stub(Compile::MAX_stubs_size/2);
+    Compile::current()->env()->record_out_of_memory_failure();
+    return;
+  }
+
+  // Create a trampoline stub relocation which relates this trampoline stub
+  // with the call instruction at insts_call_instruction_offset in the
+  // instructions code-section.
+  align(wordSize);
+  relocate(trampoline_stub_Relocation::spec(code()->insts()->start()
+                                            + insts_call_instruction_offset));
+  const int stub_start_offset = offset();
+
+  // Now, create the trampoline stub's code:
+  // - load the call
+  // - call
+  Label target;
+  ldr(rscratch1, target);
+  br(rscratch1);
+  bind(target);
+  assert(offset() - stub_start_offset == NativeCallTrampolineStub::data_offset,
+         "should be");
+  emit_int64((int64_t)dest);
+
+  const address stub_start_addr = addr_at(stub_start_offset);
+
+  assert(is_NativeCallTrampolineStub_at(stub_start_addr), "doesn't look like a trampoline");
+
+  end_a_stub();
+#else
+  ShouldNotReachHere();
+#endif
 }
 
 void MacroAssembler::ic_call(address entry) {
@@ -643,7 +751,7 @@ void MacroAssembler::ic_call(address entry) {
   // unsigned long offset;
   // ldr_constant(rscratch2, const_ptr);
   movptr(rscratch2, (uintptr_t)Universe::non_oop_word());
-  call(Address(entry, rh));
+  trampoline_call(Address(entry, rh));
 }
 
 // Implementation of call_VM versions
@@ -1291,8 +1399,7 @@ void MacroAssembler::null_check(Register reg, int offset) {
 // public methods
 
 void MacroAssembler::mov(Register r, Address dest) {
-  InstructionMark im(this);
-  code_section()->relocate(inst_mark(), dest.rspec());
+  code_section()->relocate(pc(), dest.rspec());
   u_int64_t imm64 = (u_int64_t)dest.target();
   movptr(r, imm64);
 }
@@ -2193,18 +2300,54 @@ void MacroAssembler::c_stub_prolog(int gp_arg_count, int fp_arg_count, int ret_t
 }
 #endif
 
-void MacroAssembler::push_CPU_state() {
-    push(0x3fffffff, sp);         // integer registers except lr & sp
+void MacroAssembler::push_call_clobbered_registers() {
+  push(RegSet::range(r0, r18) - RegSet::of(rscratch1, rscratch2), sp);
 
+  // Push v0-v7, v16-v31.
+  for (int i = 30; i >= 0; i -= 2) {
+    if (i <= v7->encoding() || i >= v16->encoding()) {
+        stpd(as_FloatRegister(i), as_FloatRegister(i+1),
+             Address(pre(sp, -2 * wordSize)));
+    }
+  }
+}
+
+void MacroAssembler::pop_call_clobbered_registers() {
+
+  for (int i = 0; i < 32; i += 2) {
+    if (i <= v7->encoding() || i >= v16->encoding()) {
+      ldpd(as_FloatRegister(i), as_FloatRegister(i+1),
+           Address(post(sp, 2 * wordSize)));
+    }
+  }
+
+  pop(RegSet::range(r0, r18) - RegSet::of(rscratch1, rscratch2), sp);
+}
+
+void MacroAssembler::push_CPU_state(bool save_vectors) {
+  push(0x3fffffff, sp);         // integer registers except lr & sp
+
+  if (!save_vectors) {
     for (int i = 30; i >= 0; i -= 2)
       stpd(as_FloatRegister(i), as_FloatRegister(i+1),
 	   Address(pre(sp, -2 * wordSize)));
+  } else {
+    for (int i = 30; i >= 0; i -= 2)
+      stpq(as_FloatRegister(i), as_FloatRegister(i+1),
+           Address(pre(sp, -4 * wordSize)));
+  }
 }
 
-void MacroAssembler::pop_CPU_state() {
-  for (int i = 0; i < 32; i += 2)
-    ldpd(as_FloatRegister(i), as_FloatRegister(i+1),
-	 Address(post(sp, 2 * wordSize)));
+void MacroAssembler::pop_CPU_state(bool restore_vectors) {
+  if (!restore_vectors) {
+    for (int i = 0; i < 32; i += 2)
+      ldpd(as_FloatRegister(i), as_FloatRegister(i+1),
+           Address(post(sp, 2 * wordSize)));
+  } else {
+    for (int i = 0; i < 32; i += 2)
+      ldpq(as_FloatRegister(i), as_FloatRegister(i+1),
+           Address(post(sp, 4 * wordSize)));
+  }
 
   pop(0x3fffffff, sp);         // integer registers except lr & sp
 }
@@ -2875,6 +3018,24 @@ SkipIfEqual::~SkipIfEqual() {
   _masm->bind(_label);
 }
 
+void MacroAssembler::addptr(const Address &dst, int32_t src) {
+  Address adr;
+  switch(dst.getMode()) {
+  case Address::base_plus_offset:
+    // This is the expected mode, although we allow all the other
+    // forms below.
+    adr = form_address(rscratch2, dst.base(), dst.offset(), LogBytesPerWord);
+    break;
+  default:
+    lea(rscratch2, dst);
+    adr = Address(rscratch2);
+    break;
+  }
+  ldr(rscratch1, adr);
+  add(rscratch1, rscratch1, src);
+  str(rscratch1, adr);
+}
+
 void MacroAssembler::cmpptr(Register src1, Address src2) {
   unsigned long offset;
   adrp(rscratch1, src2, offset);
@@ -2915,7 +3076,7 @@ void MacroAssembler::store_check_part_2(Register obj) {
   // FIXME: It's not likely that disp will fit into an offset so we
   // don't bother to check, but it could save an instruction.
   intptr_t disp = (intptr_t) ct->byte_map_base;
-  mov(rscratch1, disp);
+  load_byte_map_base(rscratch1);
   strb(zr, Address(obj, rscratch1));
 }
 
@@ -3398,12 +3559,10 @@ void MacroAssembler::g1_write_barrier_post(Register store_addr,
 
   lsr(card_addr, store_addr, CardTableModRefBS::card_shift);
 
-  unsigned long offset;
-  adrp(tmp2, cardtable, offset);
-
   // get the address of the card
+  load_byte_map_base(tmp2);
   add(card_addr, card_addr, tmp2);
-  ldrb(tmp2, Address(card_addr, offset));
+  ldrb(tmp2, Address(card_addr));
   cmpw(tmp2, (int)G1SATBCardTableModRefBS::g1_young_card_val());
   br(Assembler::EQ, done);
 
@@ -3411,13 +3570,13 @@ void MacroAssembler::g1_write_barrier_post(Register store_addr,
 
   membar(Assembler::Assembler::StoreLoad);
 
-  ldrb(tmp2, Address(card_addr, offset));
+  ldrb(tmp2, Address(card_addr));
   cbzw(tmp2, done);
 
   // storing a region crossing, non-NULL oop, card is clean.
   // dirty card and log.
 
-  strb(zr, Address(card_addr, offset));
+  strb(zr, Address(card_addr));
 
   ldr(rscratch1, queue_index);
   cbz(rscratch1, runtime);
@@ -3763,31 +3922,45 @@ address MacroAssembler::read_polling_page(Register r, relocInfo::relocType rtype
 
 void MacroAssembler::adrp(Register reg1, const Address &dest, unsigned long &byte_offset) {
   relocInfo::relocType rtype = dest.rspec().reloc()->type();
-  if (uabs(pc() - dest.target()) >= (1LL << 32)) {
-    guarantee(rtype == relocInfo::none
-	      || rtype == relocInfo::external_word_type
-	      || rtype == relocInfo::poll_type
-	      || rtype == relocInfo::poll_return_type,
-	      "can only use a fixed address with an ADRP");
-    // Out of range.  This doesn't happen very often, but we have to
-    // handle it
-    mov(reg1, dest);
-    byte_offset = 0;
-  } else {
-    InstructionMark im(this);
-    code_section()->relocate(inst_mark(), dest.rspec());
-    byte_offset = (uint64_t)dest.target() & 0xfff;
+  unsigned long low_page = (unsigned long)CodeCache::low_bound() >> 12;
+  unsigned long high_page = (unsigned long)(CodeCache::high_bound()-1) >> 12;
+  unsigned long dest_page = (unsigned long)dest.target() >> 12;
+  long offset_low = dest_page - low_page;
+  long offset_high = dest_page - high_page;
+
+  assert(is_valid_AArch64_address(dest.target()), "bad address");
+  assert(dest.getMode() == Address::literal, "ADRP must be applied to a literal address");
+
+  InstructionMark im(this);
+  code_section()->relocate(inst_mark(), dest.rspec());
+  // 8143067: Ensure that the adrp can reach the dest from anywhere within
+  // the code cache so that if it is relocated we know it will still reach
+  if (offset_high >= -(1<<20) && offset_low < (1<<20)) {
     _adrp(reg1, dest.target());
+  } else {
+    unsigned long pc_page = (unsigned long)pc() >> 12;
+    long offset = dest_page - pc_page;
+    offset = (offset & ((1<<20)-1)) << 12;
+    _adrp(reg1, pc()+offset);
+    movk(reg1, (unsigned long)dest.target() >> 32, 32);
   }
+  byte_offset = (unsigned long)dest.target() & 0xfff;
 }
 
-  bool MacroAssembler::use_acq_rel_for_volatile_fields() {
-#ifdef PRODUCT
-    return false;
-#else
-    return UseAcqRelForVolatileFields;
-#endif
+void MacroAssembler::load_byte_map_base(Register reg) {
+  jbyte *byte_map_base =
+    ((CardTableModRefBS*)(Universe::heap()->barrier_set()))->byte_map_base;
+
+  if (is_valid_AArch64_address((address)byte_map_base)) {
+    // Strictly speaking the byte_map_base isn't an address at all,
+    // and it might even be negative.
+    unsigned long offset;
+    adrp(reg, ExternalAddress((address)byte_map_base), offset);
+    assert(offset == 0, "misaligned card table base");
+  } else {
+    mov(reg, (uint64_t)byte_map_base);
   }
+}
 
 void MacroAssembler::build_frame(int framesize) {
   if (framesize == 0) {

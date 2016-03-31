@@ -749,7 +749,7 @@ class StubGenerator: public StubCodeGenerator {
            __ sub(end, end, start); // number of bytes to copy
 
           const Register count = end; // 'end' register contains bytes count now
-	  __ mov(scratch, (address)ct->byte_map_base);
+          __ load_byte_map_base(scratch);
           __ add(start, start, scratch);
 	  __ BIND(L_loop);
 	  __ strb(zr, Address(start, count));
@@ -2035,7 +2035,7 @@ class StubGenerator: public StubCodeGenerator {
       __ br(Assembler::EQ, L_rounds_52);
 
       __ aesd(v0, v17); __ aesimc(v0, v0);
-      __ aesd(v0, v17); __ aesimc(v0, v0);
+      __ aesd(v0, v18); __ aesimc(v0, v0);
     __ BIND(L_rounds_52);
       __ aesd(v0, v19); __ aesimc(v0, v0);
       __ aesd(v0, v20); __ aesimc(v0, v0);
@@ -2495,7 +2495,7 @@ class StubGenerator: public StubCodeGenerator {
     __ should_not_reach_here();
     __ bind(L);
 #endif // ASSERT
-    __ b(RuntimeAddress(StubRoutines::forward_exception_entry()));
+    __ far_jump(RuntimeAddress(StubRoutines::forward_exception_entry()));
 
 
     // codeBlob framesize is in words (not VMRegImpl::slot_size)

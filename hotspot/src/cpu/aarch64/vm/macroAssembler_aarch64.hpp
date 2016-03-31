@@ -209,8 +209,11 @@ class MacroAssembler: public Assembler {
   inline void moviw(Register Rd, unsigned imm) { orrw(Rd, zr, imm); }
   inline void movi(Register Rd, unsigned imm) { orr(Rd, zr, imm); }
 
-  inline void tstw(Register Rd, unsigned imm) { andsw(zr, Rd, imm); }
-  inline void tst(Register Rd, unsigned imm) { ands(zr, Rd, imm); }
+  inline void tstw(Register Rd, Register Rn) { andsw(zr, Rd, Rn); }
+  inline void tst(Register Rd, Register Rn) { ands(zr, Rd, Rn); }
+
+  inline void tstw(Register Rd, uint64_t imm) { andsw(zr, Rd, imm); }
+  inline void tst(Register Rd, uint64_t imm) { ands(zr, Rd, imm); }
 
   inline void bfiw(Register Rd, Register Rn, unsigned lsb, unsigned width) {
     bfmw(Rd, Rn, ((32 - lsb) & 31), (width - 1));
@@ -433,6 +436,13 @@ public:
   int push(RegSet regs, Register stack) { if (regs.bits()) push(regs.bits(), stack); }
   int pop(RegSet regs, Register stack) { if (regs.bits()) pop(regs.bits(), stack); }
 
+  // Push and pop everything that might be clobbered by a native
+  // runtime call except rscratch1 and rscratch2.  (They are always
+  // scratch, so we don't have to protect them.)  Only save the lower
+  // 64 bits of each vector register.
+  void push_call_clobbered_registers();
+  void pop_call_clobbered_registers();
+
   // now mov instructions for loading absolute addresses and 32 or
   // 64 bit integers
 
@@ -467,6 +477,32 @@ public:
 
   void mov(FloatRegister Vd, SIMD_Arrangement T, FloatRegister Vn) {
     orr(Vd, T, Vn, Vn);
+  }
+
+public:
+
+  // Generalized Test Bit And Branch, including a "far" variety which
+  // spans more than 32KiB.
+  void tbr(Condition cond, Register Rt, int bitpos, Label &dest, bool far = false) {
+    assert(cond == EQ || cond == NE, "must be");
+
+    if (far)
+      cond = ~cond;
+
+    void (Assembler::* branch)(Register Rt, int bitpos, Label &L);
+    if (cond == Assembler::EQ)
+      branch = &Assembler::tbz;
+    else
+      branch = &Assembler::tbnz;
+
+    if (far) {
+      Label L;
+      (this->*branch)(Rt, bitpos, L);
+      b(dest);
+      bind(L);
+    } else {
+      (this->*branch)(Rt, bitpos, dest);
+    }
   }
 
   // macro instructions for accessing and updating floating point
@@ -509,7 +545,11 @@ public:
   static bool needs_explicit_null_check(intptr_t offset);
 
   static address target_addr_for_insn(address insn_addr, unsigned insn);
-
+  static address target_addr_for_insn(address insn_addr) {
+    unsigned insn = *(unsigned*)insn_addr;
+    return target_addr_for_insn(insn_addr, insn);
+  }
+  
   // Required platform-specific helpers for Label::patch_instructions.
   // They _shadow_ the declarations in AbstractAssembler, which are undefined.
   static int pd_patch_instruction_size(address branch, address target);
@@ -517,14 +557,15 @@ public:
     pd_patch_instruction_size(branch, target);
   }
   static address pd_call_destination(address branch) {
-    unsigned insn = *(unsigned*)branch;
-    return target_addr_for_insn(branch, insn);
+    return target_addr_for_insn(branch);
   }
 #ifndef PRODUCT
   static void pd_print_patched_instruction(address branch);
 #endif
 
   static int patch_oop(address insn_addr, address o);
+
+  void emit_trampoline_stub(int insts_call_instruction_offset, address target);
 
   // The following 4 methods return the offset of the appropriate move instruction
 
@@ -768,8 +809,8 @@ public:
 
   DEBUG_ONLY(void verify_heapbase(const char* msg);)
 
-  void push_CPU_state();
-  void pop_CPU_state() ;
+  void push_CPU_state(bool save_vectors = false);
+  void pop_CPU_state(bool restore_vectors = false) ;
 
   // Round up to a power of two
   void round_to(Register reg, int modulus);
@@ -899,13 +940,7 @@ public:
 
   // Arithmetics
 
-  void addptr(Address dst, int32_t src) {
-    lea(rscratch2, dst);
-    ldr(rscratch1, Address(rscratch2));
-    add(rscratch1, rscratch1, src);
-    str(rscratch1, Address(rscratch2));
-  }
-
+  void addptr(const Address &dst, int32_t src);
   void cmpptr(Register src1, Address src2);
 
   void cmpxchgptr(Register oldv, Register newv, Register addr, Register tmp,
@@ -929,14 +964,43 @@ public:
     str(rscratch2, adr);
   }
 
+  // A generic CAS; success or failure is in the EQ flag.
+  template <typename T1, typename T2>
+  void cmpxchg(Register addr, Register expected, Register new_val,
+               T1 load_insn,
+               void (MacroAssembler::*cmp_insn)(Register, Register),
+               T2 store_insn,
+               Register tmp = rscratch1) {
+    Label retry_load, done;
+    bind(retry_load);
+    (this->*load_insn)(tmp, addr);
+    (this->*cmp_insn)(tmp, expected);
+    br(Assembler::NE, done);
+    (this->*store_insn)(tmp, new_val, addr);
+    cbnzw(tmp, retry_load);
+    bind(done);
+  }
+
   // Calls
 
-  // void call(Label& L, relocInfo::relocType rtype);
+  void trampoline_call(Address entry, CodeBuffer *cbuf = NULL);
 
-  // NOTE: this call tranfers to the effective address of entry NOT
-  // the address contained by entry. This is because this is more natural
-  // for jumps/calls.
-  void call(Address entry);
+  static bool far_branches() {
+    return ReservedCodeCacheSize > branch_range;
+  }
+
+  // Jumps that can reach anywhere in the code cache.
+  // Trashes tmp.
+  void far_call(Address entry, CodeBuffer *cbuf = NULL, Register tmp = rscratch1);
+  void far_jump(Address entry, CodeBuffer *cbuf = NULL, Register tmp = rscratch1);
+
+  static int far_branch_size() {
+    if (far_branches()) {
+      return 3 * 4;  // adrp, add, br
+    } else {
+      return 4;
+    }
+  }
 
   // Emit the CompiledIC call idiom
   void ic_call(address entry);
@@ -1051,6 +1115,15 @@ public:
   // of your data.
   Address form_address(Register Rd, Register base, long byte_offset, int shift);
 
+  // Return true iff an address is within the 48-bit AArch64 address
+  // space.
+  bool is_valid_AArch64_address(address a) {
+    return ((uint64_t)a >> 48) == 0;
+  }
+
+  // Load the base of the cardtable byte map into reg.
+  void load_byte_map_base(Register reg);
+
   // Prolog generator routines to support switch between x86 code and
   // generated ARM code
 
@@ -1095,9 +1168,6 @@ public:
 
   address read_polling_page(Register r, address page, relocInfo::relocType rtype);
   address read_polling_page(Register r, relocInfo::relocType rtype);
-
-  // Used by aarch64.ad to control code generation
-  static bool use_acq_rel_for_volatile_fields();
 
   // CRC32 code for java.util.zip.CRC32::updateBytes() instrinsic.
   void update_byte_crc32(Register crc, Register val, Register table);
@@ -1191,10 +1261,6 @@ public:
     }
   }
 };
-
-// Used by aarch64.ad to control code generation
-#define treat_as_volatile(MEM_NODE)					\
-  (MacroAssembler::use_acq_rel_for_volatile_fields() ? (MEM_NODE)->is_volatile() : false)
 
 #ifdef ASSERT
 inline bool AbstractAssembler::pd_check_instruction_mark() { return false; }

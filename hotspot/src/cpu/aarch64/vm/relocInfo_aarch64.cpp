@@ -59,15 +59,37 @@ void Relocation::pd_set_data_value(address x, intptr_t o, bool verify_only) {
 }
 
 address Relocation::pd_call_destination(address orig_addr) {
+  assert(is_call(), "should be a call here");
+  if (NativeCall::is_call_at(addr())) {
+    address trampoline = nativeCall_at(addr())->get_trampoline();
+    if (trampoline) {
+      return nativeCallTrampolineStub_at(trampoline)->destination();
+    }
+  }
   if (orig_addr != NULL) {
-    return MacroAssembler::pd_call_destination(orig_addr);
+    address new_addr = MacroAssembler::pd_call_destination(orig_addr);
+    // If call is branch to self, don't try to relocate it, just leave it
+    // as branch to self. This happens during code generation if the code
+    // buffer expands. It will be relocated to the trampoline above once
+    // code generation is complete.
+    new_addr = (new_addr == orig_addr) ? addr() : new_addr;
+    return new_addr;
   }
   return MacroAssembler::pd_call_destination(addr());
 }
 
 
 void Relocation::pd_set_call_destination(address x) {
+  assert(is_call(), "should be a call here");
+  if (NativeCall::is_call_at(addr())) {
+    address trampoline = nativeCall_at(addr())->get_trampoline();
+    if (trampoline) {
+      nativeCall_at(addr())->set_destination_mt_safe(x, /* assert_lock */false);
+      return;
+    }
+  }
   MacroAssembler::pd_patch_instruction(addr(), x);
+  assert(pd_call_destination(addr()) == x, "fail in reloc");
 }
 
 address* Relocation::pd_address_in_code() {
@@ -80,17 +102,16 @@ address Relocation::pd_get_address_from_code() {
 }
 
 void poll_Relocation::fix_relocation_after_move(const CodeBuffer* src, CodeBuffer* dest) {
-  // fprintf(stderr, "Try to fix poll reloc at %p to %p\n", addr(), dest);
   if (NativeInstruction::maybe_cpool_ref(addr())) {
     address old_addr = old_addr_for(addr(), src, dest);
-    MacroAssembler::pd_patch_instruction(addr(), pd_call_destination(old_addr));
+    MacroAssembler::pd_patch_instruction(addr(), MacroAssembler::target_addr_for_insn(old_addr));
   }
 }
 
 void poll_return_Relocation::fix_relocation_after_move(const CodeBuffer* src, CodeBuffer* dest)  {
   if (NativeInstruction::maybe_cpool_ref(addr())) {
     address old_addr = old_addr_for(addr(), src, dest);
-    MacroAssembler::pd_patch_instruction(addr(), pd_call_destination(old_addr));
+    MacroAssembler::pd_patch_instruction(addr(), MacroAssembler::target_addr_for_insn(old_addr));
   }
 }
 
