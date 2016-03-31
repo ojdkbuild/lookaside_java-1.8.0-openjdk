@@ -185,10 +185,11 @@ void InterpreterMacroAssembler::get_cache_and_index_and_bytecode_at_bcp(Register
   get_cache_and_index_at_bcp(cache, index, bcp_offset, index_size);
   // We use a 32-bit load here since the layout of 64-bit words on
   // little-endian machines allow us that.
-  // n.b. unlike x86 cache alreeady includes the index offset
-  ldrw(bytecode, Address(cache,
+  // n.b. unlike x86 cache already includes the index offset
+  lea(bytecode, Address(cache,
 			 ConstantPoolCache::base_offset()
 			 + ConstantPoolCacheEntry::indices_offset()));
+  ldarw(bytecode, bytecode);
   const int shift_count = (1 + byte_no) * BitsPerByte;
   ubfx(bytecode, bytecode, shift_count, BitsPerByte);
 }
@@ -1349,9 +1350,8 @@ void InterpreterMacroAssembler::notify_method_entry() {
   // the code to check if the event should be sent.
   if (JvmtiExport::can_post_interpreter_events()) {
     Label L;
-    ldr(r3, Address(rthread, JavaThread::interp_only_mode_offset()));
-    tst(r3, ~0);
-    br(Assembler::EQ, L);
+    ldrw(r3, Address(rthread, JavaThread::interp_only_mode_offset()));
+    cbzw(r3, L);
     call_VM(noreg, CAST_FROM_FN_PTR(address,
                                     InterpreterRuntime::post_method_entry));
     bind(L);
@@ -1541,14 +1541,14 @@ void InterpreterMacroAssembler::profile_arguments_type(Register mdp, Register ca
     if (MethodData::profile_arguments()) {
       Label done;
       int off_to_args = in_bytes(TypeEntriesAtCall::args_data_offset());
-      add(mdp, mdp, off_to_args);
 
       for (int i = 0; i < TypeProfileArgsLimit; i++) {
         if (i > 0 || MethodData::profile_return()) {
           // If return value type is profiled we may have no argument to profile
-          ldr(tmp, Address(mdp, in_bytes(TypeEntriesAtCall::cell_count_offset())-off_to_args));
+          ldr(tmp, Address(mdp, in_bytes(TypeEntriesAtCall::cell_count_offset())));
           sub(tmp, tmp, i*TypeStackSlotEntries::per_arg_count());
           cmp(tmp, TypeStackSlotEntries::per_arg_count());
+          add(rscratch1, mdp, off_to_args);
           br(Assembler::LT, done);
         }
         ldr(tmp, Address(callee, Method::const_offset()));
@@ -1556,26 +1556,27 @@ void InterpreterMacroAssembler::profile_arguments_type(Register mdp, Register ca
         // stack offset o (zero based) from the start of the argument
         // list, for n arguments translates into offset n - o - 1 from
         // the end of the argument list
-	ldr(rscratch1, Address(mdp, in_bytes(TypeEntriesAtCall::stack_slot_offset(i))-off_to_args));
+        ldr(rscratch1, Address(mdp, in_bytes(TypeEntriesAtCall::stack_slot_offset(i))));
         sub(tmp, tmp, rscratch1);
         sub(tmp, tmp, 1);
         Address arg_addr = argument_address(tmp);
         ldr(tmp, arg_addr);
 
-        Address mdo_arg_addr(mdp, in_bytes(TypeEntriesAtCall::argument_type_offset(i))-off_to_args);
+        Address mdo_arg_addr(mdp, in_bytes(TypeEntriesAtCall::argument_type_offset(i)));
         profile_obj_type(tmp, mdo_arg_addr);
 
         int to_add = in_bytes(TypeStackSlotEntries::per_arg_size());
-        add(mdp, mdp, to_add);
         off_to_args += to_add;
       }
 
       if (MethodData::profile_return()) {
-        ldr(tmp, Address(mdp, in_bytes(TypeEntriesAtCall::cell_count_offset())-off_to_args));
+        ldr(tmp, Address(mdp, in_bytes(TypeEntriesAtCall::cell_count_offset())));
         sub(tmp, tmp, TypeProfileArgsLimit*TypeStackSlotEntries::per_arg_count());
       }
 
+      add(rscratch1, mdp, off_to_args);
       bind(done);
+      mov(mdp, rscratch1);
 
       if (MethodData::profile_return()) {
         // We're right after the type profile for the last

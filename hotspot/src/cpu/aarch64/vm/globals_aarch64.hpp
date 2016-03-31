@@ -96,11 +96,12 @@ define_pd_global(intx, InlineSmallCode,          1000);
   product(bool, NearCpool, true,                                        \
          "constant pool is close to instructions")                      \
                                                                         \
-  notproduct(bool, UseAcqRelForVolatileFields, false,			\
-	     "Use acquire and release insns for volatile fields")       \
+  product(bool, UseBarriersForVolatile, false,                          \
+          "Use memory barriers to implement volatile accesses")         \
                                                                         \
   product(bool, UseCRC32, false,                                        \
           "Use CRC32 instructions for CRC32 computation")               \
+  product(bool, TraceTraps, false, "Trace all traps the signal handler")
 
 // Don't attempt to use Neon on builtin sim until builtin sim supports it
 #define UseNeon false
@@ -115,12 +116,13 @@ define_pd_global(intx, InlineSmallCode,          1000);
   product(bool, NearCpool, true,					\
          "constant pool is close to instructions")			\
                                                                         \
-  notproduct(bool, UseAcqRelForVolatileFields, false,			\
-	     "Use acquire and release insns for volatile fields")       \
+  product(bool, UseBarriersForVolatile, false,                          \
+          "Use memory barriers to implement volatile accesses")         \
   product(bool, UseNeon, false,                                         \
           "Use Neon for CRC32 computation")                             \
   product(bool, UseCRC32, false,                                        \
-          "Use CRC32 instructions for CRC32 computation")
+          "Use CRC32 instructions for CRC32 computation")               \
+  product(bool, TraceTraps, false, "Trace all traps the signal handler")
 
 #endif
 
