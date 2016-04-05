@@ -110,6 +110,8 @@ define SetupLauncher
 
   ifeq ($(USE_EXTERNAL_LIBZ), true)
     $1_LDFLAGS_SUFFIX += -lz
+  else ifeq ($(USE_OJDKBUILD_LIBZ), true)
+    $1_LDFLAGS_SUFFIX += ${OJDKBUILD_ZLIB_LDFLAGS}
   endif
 
   $1_OUTPUT_DIR_ARG := $9
@@ -428,6 +430,9 @@ endif
 ifeq ($(USE_EXTERNAL_LIBZ), true)
   UNPACKEXE_CFLAGS := -DSYSTEM_ZLIB
   UNPACKEXE_ZIPOBJS := -lz
+else ifeq ($(USE_OJDKBUILD_LIBZ), true)
+  UNPACKEXE_CFLAGS := ${OJDKBUILD_ZLIB_CFLAGS}
+  UNPACKEXE_ZIPOBJS := ${OJDKBUILD_ZLIB_LDFLAGS}
 else
   UNPACKEXE_CFLAGS := -I$(JDK_TOPDIR)/src/share/native/java/util/zip/zlib-1.2.8
   UNPACKEXE_ZIPOBJS := $(JDK_OUTPUTDIR)/objs/libzip/zcrc32$(OBJ_SUFFIX) \
@@ -452,15 +457,6 @@ UNPACKEXE_LANG := C
 ifeq ($(OPENJDK_TARGET_OS), solaris)
   UNPACKEXE_LANG := C++
 endif
-# On windows, unpack200 is linked completely differently to all other
-# executables, using the compiler with the compiler arguments.
-# It's also linked incrementally, producing a .ilk file that needs to
-# be kept away.
-ifeq ($(OPENJDK_TARGET_OS), windows)
-  BUILD_UNPACKEXE_LDEXE := $(CC)
-  EXE_OUT_OPTION_save := $(EXE_OUT_OPTION)
-  EXE_OUT_OPTION := -Fe
-endif
 
 # The linker on older SuSE distros (e.g. on SLES 10) complains with:
 # "Invalid version tag `SUNWprivate_1.1'. Only anonymous version tag is allowed in executable."
@@ -476,16 +472,14 @@ $(eval $(call SetupNativeCompilation,BUILD_UNPACKEXE, \
     EXCLUDE_FILES := jni.cpp, \
     LANG := $(UNPACKEXE_LANG), \
     OPTIMIZATION := LOW, \
-    CFLAGS := $(UNPACKEXE_CFLAGS) $(CXXFLAGS_JDKEXE) \
-        -DFULL, \
+    CFLAGS := $(UNPACKEXE_CFLAGS) $(CXXFLAGS_JDKEXE) -DFULL, \
     CFLAGS_release := -DPRODUCT, \
     CFLAGS_linux := -fPIC, \
     CFLAGS_solaris := -KPIC, \
     CFLAGS_macosx := -fPIC, \
     MAPFILE := $(UNPACK_MAPFILE),\
-    LDFLAGS := $(UNPACKEXE_ZIPOBJS), \
-    LDFLAGS_windows := $(CXXFLAGS_JDKEXE), \
-    LDFLAGS_posix := $(LDFLAGS_JDKEXE) $(LDFLAGS_CXX_JDK) \
+    LDFLAGS := $(UNPACKEXE_ZIPOBJS) \
+        $(LDFLAGS_JDKEXE) $(LDFLAGS_CXX_JDK) \
         $(call SET_SHARED_LIBRARY_NAME,$(LIBRARY_PREFIX)unpack$(SHARED_LIBRARY_SUFFIX)) \
         $(call SET_SHARED_LIBRARY_ORIGIN), \
     LDFLAGS_linux := -lc, \
@@ -502,14 +496,13 @@ $(eval $(call SetupNativeCompilation,BUILD_UNPACKEXE, \
     DEBUG_SYMBOLS := true, \
     MANIFEST := $(JDK_TOPDIR)/src/windows/resource/unpack200_proto.exe.manifest))
 
-ifeq ($(OPENJDK_TARGET_OS), windows)
-  EXE_OUT_OPTION := $(EXE_OUT_OPTION_save)
-endif
 
 ifneq ($(USE_EXTERNAL_LIBZ), true)
+ifneq ($(USE_OJDKBUILD_LIBZ), true)
 
   $(BUILD_UNPACKEXE): $(UNPACKEXE_ZIPOBJS)
 
+endif
 endif
 
 # Build into object dir and copy executable afterwards to avoid .ilk file in

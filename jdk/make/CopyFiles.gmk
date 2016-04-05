@@ -247,6 +247,16 @@ endif
 
 ##########################################################################################
 
+# Copy ojdkbuild libraries
+
+OJDBUILD_ZLIB_TARGET_LIB = $(JDK_OUTPUTDIR)/bin/$(call SHARED_LIBRARY,ojdkbuild_zlib)
+$(OJDBUILD_ZLIB_TARGET_LIB): $(OJDKBUILD_ZLIB_BUNDLE_LIB_PATH)
+	$(CP) $(OJDKBUILD_ZLIB_BUNDLE_LIB_PATH) $@
+  
+COPY_FILES += $(OJDBUILD_ZLIB_TARGET_LIB)
+  
+##########################################################################################
+
 # Copy msvcrXX.dll on windows
 
 ifeq ($(OPENJDK_TARGET_OS), windows)

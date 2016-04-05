@@ -232,6 +232,10 @@ BUILD_LIBZIP_EXCLUDES :=
 ifeq ($(USE_EXTERNAL_LIBZ), true)
   LIBZ := -lz
   LIBZIP_EXCLUDES += zlib-1.2.8
+else ifeq ($(USE_OJDKBUILD_LIBZ), true)
+  LIBZ := ${OJDKBUILD_ZLIB_LDFLAGS}
+  LIBZIP_EXCLUDES += zlib-1.2.8
+  ZLIB_CPPFLAGS := ${OJDKBUILD_ZLIB_CFLAGS}
 else
   ZLIB_CPPFLAGS := -I$(JDK_TOPDIR)/src/share/native/java/util/zip/zlib-1.2.8
 endif
@@ -266,7 +270,7 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBZIP, \
         $(EXPORT_ZIP_FUNCS), \
     LDFLAGS_windows := -export:ZIP_Open -export:ZIP_Close -export:ZIP_FindEntry \
         -export:ZIP_ReadEntry -export:ZIP_GetNextEntry -export:ZIP_CRC32 jvm.lib \
-        $(WIN_JAVA_LIB), \
+        $(WIN_JAVA_LIB) $(LIBZ), \
     LDFLAGS_SUFFIX_linux := -ljvm -ljava $(LIBZ), \
     LDFLAGS_SUFFIX_solaris := -ljvm -ljava $(LIBZ) -lc, \
     LDFLAGS_SUFFIX_aix := -ljvm -ljava $(LIBZ),\
@@ -385,6 +389,7 @@ ifeq ($(OPENJDK_TARGET_OS), macosx)
 endif
 
 ifneq ($(USE_EXTERNAL_LIBZ), true)
+ifneq ($(USE_OJDKBUILD_LIBZ), true)
   BUILD_LIBJLI_SRC_DIRS += $(JDK_TOPDIR)/src/share/native/java/util/zip/zlib-1.2.8
   LIBJLI_CFLAGS += $(ZLIB_CPPFLAGS)
   BUILD_LIBJLI_FILES += \
@@ -394,6 +399,9 @@ ifneq ($(USE_EXTERNAL_LIBZ), true)
       zadler32.c \
       zcrc32.c \
       zutil.c
+else
+  LIBJLI_CFLAGS += $(ZLIB_CPPFLAGS)
+endif
 endif
 
 ifeq ($(OPENJDK_TARGET_OS), windows)
@@ -434,7 +442,8 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBJLI, \
         -export:JLI_GetStdArgs \
         advapi32.lib \
         comctl32.lib \
-        user32.lib, \
+        user32.lib \
+        $(LIBZ), \
     VERSIONINFO_RESOURCE := $(JDK_TOPDIR)/src/windows/resource/version.rc, \
     RC_FLAGS := $(RC_FLAGS) \
         -D "JDK_FNAME=jli.dll" \
