@@ -1194,7 +1194,6 @@ public final class System {
 
         // Load the zip library now in order to keep java.util.zip.ZipFile
         // from trying to use itself to load this library later.
-        loadLibrary("ojdkbuild_zlib");
         loadLibrary("zip");
 
         // Setup Java signal handlers for HUP, TERM, and INT (where available).
