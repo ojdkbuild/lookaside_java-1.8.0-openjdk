@@ -1,1 +1,17 @@
 /build
+/jdk/make/data/tzdata/VERSION
+/jdk/make/data/tzdata/africa
+/jdk/make/data/tzdata/antarctica
+/jdk/make/data/tzdata/asia
+/jdk/make/data/tzdata/australasia
+/jdk/make/data/tzdata/backward
+/jdk/make/data/tzdata/etcetera
+/jdk/make/data/tzdata/europe
+/jdk/make/data/tzdata/factory
+/jdk/make/data/tzdata/iso3166.tab
+/jdk/make/data/tzdata/leapseconds
+/jdk/make/data/tzdata/northamerica
+/jdk/make/data/tzdata/pacificnew
+/jdk/make/data/tzdata/southamerica
+/jdk/make/data/tzdata/systemv
+/jdk/make/data/tzdata/zone.tab
