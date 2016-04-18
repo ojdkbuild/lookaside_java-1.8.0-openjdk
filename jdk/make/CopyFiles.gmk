@@ -248,12 +248,16 @@ endif
 ##########################################################################################
 
 # Copy ojdkbuild libraries
-
+# zlib
 OJDBUILD_ZLIB_TARGET_LIB = $(JDK_OUTPUTDIR)/bin/$(call SHARED_LIBRARY,ojdkbuild_zlib)
 $(OJDBUILD_ZLIB_TARGET_LIB): $(OJDKBUILD_ZLIB_BUNDLE_LIB_PATH)
-	$(CP) $(OJDKBUILD_ZLIB_BUNDLE_LIB_PATH) $@
-  
+	$(CP) $(OJDKBUILD_ZLIB_BUNDLE_LIB_PATH) $@  
 COPY_FILES += $(OJDBUILD_ZLIB_TARGET_LIB)
+# nss
+OJDBUILD_NSS_TARGET_LIB = $(JDK_OUTPUTDIR)/bin/$(call SHARED_LIBRARY,ojdkbuild_nss)
+$(OJDBUILD_NSS_TARGET_LIB): $(OJDKBUILD_NSS_BUNDLE_LIB_PATH)
+	$(CP) $(OJDKBUILD_NSS_BUNDLE_LIB_PATH) $@  
+COPY_FILES += $(OJDBUILD_NSS_TARGET_LIB)
   
 ##########################################################################################
 

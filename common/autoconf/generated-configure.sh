@@ -650,6 +650,10 @@ USE_OJDKBUILD_LIBZ
 OJDKBUILD_ZLIB_CFLAGS
 OJDKBUILD_ZLIB_LDFLAGS
 OJDKBUILD_ZLIB_BUNDLE_LIB_PATH
+USE_OJDKBUILD_NSS
+OJDKBUILD_NSS_CFLAGS
+OJDKBUILD_NSS_LDFLAGS
+OJDKBUILD_NSS_BUNDLE_LIB_PATH
 USE_EXTERNAL_LIBGIF
 USE_EXTERNAL_LIBJPEG
 ALSA_LIBS
@@ -35098,7 +35102,11 @@ $as_echo "system not found" >&6; }
   OJDKBUILD_ZLIB_CFLAGS=`pkg-config zlib --cflags --msvc-syntax`
   OJDKBUILD_ZLIB_LDFLAGS=`pkg-config zlib --libs --msvc-syntax`
   OJDKBUILD_ZLIB_BUNDLE_LIB_PATH=`pkg-config zlib --variable=bundle_lib_path`
-
+  USE_OJDKBUILD_NSS=true
+  OJDKBUILD_NSS_CFLAGS=`pkg-config nss --cflags --msvc-syntax`
+  OJDKBUILD_NSS_LDFLAGS=`pkg-config nss --libs --msvc-syntax`
+  OJDKBUILD_NSS_BUNDLE_LIB_PATH=`pkg-config nss --variable=bundle_lib_path`
+  # end ojdkbuild
 
   ###############################################################################
   LIBZIP_CAN_USE_MMAP=true

@@ -223,6 +223,9 @@ ifeq ($(ENABLE_INTREE_EC), yes)
   ifeq ($(USE_EXTERNAL_NSS), true)
     BUILD_LIBSUNEC_IMPL_DIR :=
     BUILD_LIBSUNEC_FLAGS += $(NSS_CFLAGS) -DSYSTEM_NSS -DNSS_ENABLE_ECC
+  else ifeq ($(USE_OJDKBUILD_NSS), true)
+    BUILD_LIBSUNEC_IMPL_DIR :=
+    BUILD_LIBSUNEC_FLAGS += $(OJDKBUILD_NSS_CFLAGS) -DSYSTEM_NSS -DNSS_ENABLE_ECC
   else
     BUILD_LIBSUNEC_IMPL_DIR := \
       $(JDK_TOPDIR)/src/share/native/sun/security/ec/impl
@@ -256,6 +259,7 @@ ifeq ($(ENABLE_INTREE_EC), yes)
       MAPFILE := $(JDK_TOPDIR)/make/mapfiles/libsunec/mapfile-vers, \
       LDFLAGS := $(LDFLAGS_JDKLIB) $(LDFLAGS_CXX_JDK), \
       LDFLAGS_macosx := $(call SET_SHARED_LIBRARY_ORIGIN), \
+      LDFLAGS_windows := $(OJDKBUILD_NSS_LDFLAGS), \
       LDFLAGS_SUFFIX := $(LIBCXX), \
       LDFLAGS_SUFFIX_linux := -lc $(NSS_LIBS), \
       LDFLAGS_SUFFIX_solaris := -lc $(NSS_LIBS), \

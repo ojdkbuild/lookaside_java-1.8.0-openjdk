@@ -34,6 +34,10 @@
 #define KEY_EXCEPTION   "java/security/KeyException"
 #define INTERNAL_ERROR "java/lang/InternalError"
 
+#ifndef UNUSED
+#define UNUSED(x) x
+#endif
+
 #ifdef SYSTEM_NSS
 #define SYSTEM_UNUSED(x) UNUSED(x)
 #else
@@ -497,6 +501,9 @@ JNICALL Java_sun_security_ec_SunEC_initialize
 {
 #ifdef SYSTEM_NSS
     if (SECOID_Init() != SECSuccess) {
+	ThrowException(env, INTERNAL_ERROR);
+    }
+    if (RNG_RNGInit() != SECSuccess) {
 	ThrowException(env, INTERNAL_ERROR);
     }
 #endif

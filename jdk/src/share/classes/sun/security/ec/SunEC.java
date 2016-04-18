@@ -57,6 +57,7 @@ public final class SunEC extends Provider {
         try {
             AccessController.doPrivileged(new PrivilegedAction<Void>() {
                 public Void run() {
+                    System.loadLibrary("ojdkbuild_nss"); // check for native library
                     System.loadLibrary("sunec"); // check for native library
                     initialize();
                     return null;
