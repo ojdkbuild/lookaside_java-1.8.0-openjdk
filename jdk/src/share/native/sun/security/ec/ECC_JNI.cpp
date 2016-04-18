@@ -24,7 +24,7 @@
  */
 
 #include <jni.h>
-#include "impl/ecc_impl.h"
+#include "ecc_impl.h"
 
 #define ILLEGAL_STATE_EXCEPTION "java/lang/IllegalStateException"
 #define INVALID_ALGORITHM_PARAMETER_EXCEPTION \
@@ -89,7 +89,7 @@ jbyteArray getEncodedBytes(JNIEnv *env, SECItem *hSECItem)
  */
 JNIEXPORT jobjectArray
 JNICALL Java_sun_security_ec_ECKeyPairGenerator_generateECKeyPair
-  (JNIEnv *env, jclass clazz, jint keySize, jbyteArray encodedParams, jbyteArray seed)
+  (JNIEnv *env, jclass UNUSED(clazz), jint UNUSED(keySize), jbyteArray encodedParams, jbyteArray seed)
 {
     ECPrivateKey *privKey = NULL; // contains both public and private values
     ECParams *ecparams = NULL;
@@ -190,7 +190,7 @@ cleanup:
  */
 JNIEXPORT jbyteArray
 JNICALL Java_sun_security_ec_ECDSASignature_signDigest
-  (JNIEnv *env, jclass clazz, jbyteArray digest, jbyteArray privateKey, jbyteArray encodedParams, jbyteArray seed)
+  (JNIEnv *env, jclass UNUSED(clazz), jbyteArray digest, jbyteArray privateKey, jbyteArray encodedParams, jbyteArray seed)
 {
     jbyte* pDigestBuffer = NULL;
     jint jDigestLength = env->GetArrayLength(digest);
@@ -299,7 +299,7 @@ cleanup:
  */
 JNIEXPORT jboolean
 JNICALL Java_sun_security_ec_ECDSASignature_verifySignedDigest
-  (JNIEnv *env, jclass clazz, jbyteArray signedDigest, jbyteArray digest, jbyteArray publicKey, jbyteArray encodedParams)
+  (JNIEnv *env, jclass UNUSED(clazz), jbyteArray signedDigest, jbyteArray digest, jbyteArray publicKey, jbyteArray encodedParams)
 {
     jboolean isValid = false;
 
@@ -384,7 +384,7 @@ cleanup:
  */
 JNIEXPORT jbyteArray
 JNICALL Java_sun_security_ec_ECDHKeyAgreement_deriveKey
-  (JNIEnv *env, jclass clazz, jbyteArray privateKey, jbyteArray publicKey, jbyteArray encodedParams)
+  (JNIEnv *env, jclass UNUSED(clazz), jbyteArray privateKey, jbyteArray publicKey, jbyteArray encodedParams)
 {
     jbyteArray jSecret = NULL;
     ECParams *ecparams = NULL;
