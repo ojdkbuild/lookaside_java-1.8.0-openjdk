@@ -58,6 +58,7 @@ public final class SunEC extends Provider {
             AccessController.doPrivileged(new PrivilegedAction<Void>() {
                 public Void run() {
                     System.loadLibrary("sunec"); // check for native library
+                    initialize();
                     return null;
                 }
             });
@@ -80,5 +81,23 @@ public final class SunEC extends Provider {
             AccessController.doPrivileged(new PutAllAction(this, map));
         }
     }
+
+    /**
+     * Cleanup native resources during finalisation.
+     */
+    @Override
+    protected void finalize() {
+        cleanup();
+    }
+
+    /**
+     * Initialize the native code.
+     */
+    private static native void initialize();
+
+    /**
+     * Cleanup in the native layer.
+     */
+    private static native void cleanup();
 
 }
