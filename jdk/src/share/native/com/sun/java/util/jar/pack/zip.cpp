@@ -545,8 +545,11 @@ static jlong read_input_via_gzip(unpacker* u,
       zs.avail_in = (int) read_gzin_fn(u, inbuf, 1, inbuflen);
       zs.next_in = (uchar*) inbuf;
     }
-    int error = inflate(&zs, Z_NO_FLUSH);
-    if (error != Z_OK && error != Z_STREAM_END) {
+    // When flush is set to Z_FINISH, inflate() cannot return Z_OK. Instead it
+    // will return Z_BUF_ERROR if it has not reached the end of the stream.
+    // So, the only normal return codes are Z_BUF_ERROR and Z_STREAM_END.
+    int error = inflate(&zs, Z_FINISH);
+    if (error != Z_BUF_ERROR && error != Z_STREAM_END) {
       u->abort("error inflating input");
       break;
     }

@@ -1416,9 +1416,7 @@ InflateFully(jzfile *zip, jzentry *entry, void *buf, char **msg)
         strm.next_in = (Bytef *)tmp;
         strm.avail_in = n;
         do {
-            switch (inflate(&strm, Z_PARTIAL_FLUSH)) {
-            case Z_OK:
-                break;
+            switch (inflate(&strm, Z_FINISH)) {
             case Z_STREAM_END:
                 if (count != 0 || strm.total_out != entry->size) {
                     *msg = "inflateFully: Unexpected end of stream";

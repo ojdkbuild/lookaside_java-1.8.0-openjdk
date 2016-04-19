@@ -91,7 +91,7 @@ inflate_file(int fd, zentry *entry, int *size_out)
         }
         zs.next_out = (Byte*)out;
         zs.avail_out = (uInt)entry->isize;
-        if (inflate(&zs, Z_PARTIAL_FLUSH) < 0) {
+        if (inflate(&zs, Z_FINISH) != Z_STREAM_END) {
             free(in);
             free(out);
             return (NULL);
