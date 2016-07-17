@@ -30,6 +30,7 @@ import java.io.PrintStream;
 import java.io.IOException;
 import java.math.BigInteger;
 
+import java.security.AccessController;
 import java.security.cert.CertificateException;
 import java.security.NoSuchAlgorithmException;
 import java.security.InvalidKeyException;
@@ -39,6 +40,7 @@ import java.security.PublicKey;
 
 import java.util.Base64;
 
+import sun.security.action.GetPropertyAction;
 import sun.security.util.*;
 import sun.security.x509.AlgorithmId;
 import sun.security.x509.X509Key;
@@ -76,6 +78,14 @@ import sun.security.x509.X500Name;
  * @author Hemma Prafullchandra
  */
 public class PKCS10 {
+
+    private static final byte[] sysLineEndings;
+
+    static {
+        sysLineEndings =
+	    AccessController.doPrivileged(new GetPropertyAction("line.separator")).getBytes();
+    }
+
     /**
      * Constructs an unsigned PKCS #10 certificate request.  Before this
      * request may be used, it must be encoded and signed.  Then it
@@ -286,13 +296,39 @@ public class PKCS10 {
      */
     public void print(PrintStream out)
     throws IOException, SignatureException {
+        print(out, false);
+    }
+
+    /**
+     * Prints an E-Mailable version of the certificate request on the print
+     * stream passed.  The format is a common base64 encoded one, supported
+     * by most Certificate Authorities because Netscape web servers have
+     * used this for some time.  Some certificate authorities expect some
+     * more information, in particular contact information for the web
+     * server administrator.
+     *
+     * @param out the print stream where the certificate request
+     *  will be printed.
+     * @param systemLineEndings true if the request should be terminated
+     *  using the system line endings.
+     * @exception IOException when an output operation failed
+     * @exception SignatureException when the certificate request was
+     *  not yet signed.
+     */
+    public void print(PrintStream out, boolean systemLineEndings)
+    throws IOException, SignatureException {
+        byte[] lineEndings;
+
         if (encoded == null)
             throw new SignatureException("Cert request was not signed");
 
+        if (systemLineEndings)
+            lineEndings = sysLineEndings;
+        else
+            lineEndings = new byte[] {'\r', '\n'}; // CRLF
 
-        byte[] CRLF = new byte[] {'\r', '\n'};
         out.println("-----BEGIN NEW CERTIFICATE REQUEST-----");
-        out.println(Base64.getMimeEncoder(64, CRLF).encodeToString(encoded));
+        out.println(Base64.getMimeEncoder(64, lineEndings).encodeToString(encoded));
         out.println("-----END NEW CERTIFICATE REQUEST-----");
     }
 

@@ -168,6 +168,8 @@ public class Resources extends java.util.ListResourceBundle {
                 "keystore password"}, //-storepass
         {"keystore.type",
                 "keystore type"}, //-storetype
+	{"system.line.endings",
+	        "use system line endings rather than CRLF to terminate output"}, //-systemlineendings
         {"trust.certificates.from.cacerts",
                 "trust certificates from cacerts"}, //-trustcacerts
         {"verbose.output",
