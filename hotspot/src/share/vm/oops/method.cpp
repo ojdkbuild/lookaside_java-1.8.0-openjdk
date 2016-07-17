@@ -36,6 +36,7 @@
 #include "memory/generation.hpp"
 #include "memory/heapInspection.hpp"
 #include "memory/metadataFactory.hpp"
+#include "memory/metaspaceShared.hpp"
 #include "memory/oopFactory.hpp"
 #include "oops/constMethod.hpp"
 #include "oops/methodData.hpp"
@@ -84,9 +85,6 @@ Method::Method(ConstMethod* xconst, AccessFlags access_flags, int size) {
   set_constMethod(xconst);
   set_access_flags(access_flags);
   set_method_size(size);
-#ifdef CC_INTERP
-  set_result_index(T_VOID);
-#endif
   set_intrinsic_id(vmIntrinsics::_none);
   set_jfr_towrite(false);
   set_force_inline(false);
@@ -313,6 +311,33 @@ void Method::remove_unshareable_info() {
   unlink_method();
 }
 
+void Method::set_vtable_index(int index) {
+  if (is_shared() && !MetaspaceShared::remapped_readwrite()) {
+    // At runtime initialize_vtable is rerun as part of link_class_impl()
+    // for a shared class loaded by the non-boot loader to obtain the loader
+    // constraints based on the runtime classloaders' context.
+    return; // don't write into the shared class
+  } else {
+    _vtable_index = index;
+  }
+}
+
+void Method::set_itable_index(int index) {
+  if (is_shared() && !MetaspaceShared::remapped_readwrite()) {
+    // At runtime initialize_itable is rerun as part of link_class_impl()
+    // for a shared class loaded by the non-boot loader to obtain the loader
+    // constraints based on the runtime classloaders' context. The dumptime
+    // itable index should be the same as the runtime index.
+    assert(_vtable_index == itable_index_max - index,
+           "archived itable index is different from runtime index");
+    return; // don’t write into the shared class
+  } else {
+    _vtable_index = itable_index_max - index;
+  }
+  assert(valid_itable_index(), "");
+}
+
+
 
 bool Method::was_executed_more_than(int n) {
   // Invocation counter is reset when the Method* is compiled.
@@ -416,12 +441,6 @@ void Method::compute_size_of_parameters(Thread *thread) {
   ArgumentSizeComputer asc(signature());
   set_size_of_parameters(asc.size() + (is_static() ? 0 : 1));
 }
-
-#ifdef CC_INTERP
-void Method::set_result_index(BasicType type)          {
-  _result_index = Interpreter::BasicType_as_index(type);
-}
-#endif
 
 BasicType Method::result_type() const {
   ResultTypeFinder rtf(signature());
