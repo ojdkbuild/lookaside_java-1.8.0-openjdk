@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2016, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -104,9 +104,6 @@ class Method : public Metadata {
   AccessFlags       _access_flags;               // Access flags
   int               _vtable_index;               // vtable index of this method (see VtableIndexFlag)
                                                  // note: can have vtables with >2**16 elements (because of inheritance)
-#ifdef CC_INTERP
-  int               _result_index;               // C++ interpreter needs for converting results to/from stack
-#endif
   u2                _method_size;                // size of this object
   u1                _intrinsic_id;               // vmSymbols::intrinsic_id (0 == _none)
   u1                _jfr_towrite          : 1,   // Flags
@@ -200,11 +197,6 @@ class Method : public Metadata {
   AnnotationArray* type_annotations() const      {
     return constMethod()->type_annotations();
   }
-
-#ifdef CC_INTERP
-  void set_result_index(BasicType type);
-  int  result_index()                            { return _result_index; }
-#endif
 
   // Helper routine: get klass name + "." + method name + signature as
   // C string, for the purpose of providing more useful NoSuchMethodErrors
@@ -478,12 +470,12 @@ class Method : public Metadata {
   DEBUG_ONLY(bool valid_vtable_index() const     { return _vtable_index >= nonvirtual_vtable_index; })
   bool has_vtable_index() const                  { return _vtable_index >= 0; }
   int  vtable_index() const                      { return _vtable_index; }
-  void set_vtable_index(int index)               { _vtable_index = index; }
+  void set_vtable_index(int index);
   DEBUG_ONLY(bool valid_itable_index() const     { return _vtable_index <= pending_itable_index; })
   bool has_itable_index() const                  { return _vtable_index <= itable_index_max; }
   int  itable_index() const                      { assert(valid_itable_index(), "");
                                                    return itable_index_max - _vtable_index; }
-  void set_itable_index(int index)               { _vtable_index = itable_index_max - index; assert(valid_itable_index(), ""); }
+  void set_itable_index(int index);
 
   // interpreter entry
   address interpreter_entry() const              { return _i2i_entry; }
@@ -564,7 +556,6 @@ class Method : public Metadata {
   void compute_size_of_parameters(Thread *thread); // word size of parameters (receiver if any + arguments)
   Symbol* klass_name() const;                    // returns the name of the method holder
   BasicType result_type() const;                 // type of the method result
-  int result_type_index() const;                 // type index of the method result
   bool is_returning_oop() const                  { BasicType r = result_type(); return (r == T_OBJECT || r == T_ARRAY); }
   bool is_returning_fp() const                   { BasicType r = result_type(); return (r == T_FLOAT || r == T_DOUBLE); }
 
@@ -657,9 +648,6 @@ class Method : public Metadata {
   // interpreter support
   static ByteSize const_offset()                 { return byte_offset_of(Method, _constMethod       ); }
   static ByteSize access_flags_offset()          { return byte_offset_of(Method, _access_flags      ); }
-#ifdef CC_INTERP
-  static ByteSize result_index_offset()          { return byte_offset_of(Method, _result_index ); }
-#endif /* CC_INTERP */
   static ByteSize from_compiled_offset()         { return byte_offset_of(Method, _from_compiled_entry); }
   static ByteSize code_offset()                  { return byte_offset_of(Method, _code); }
   static ByteSize method_data_offset()           {
