@@ -1194,6 +1194,9 @@ ifndef BUILD_HEADLESS_ONLY
 
   ifeq ($(USE_EXTERNAL_LIBGIF), true)
     GIFLIB_LDFLAGS := -lgif
+  else ifeq ($(USE_OJDKBUILD_LIBGIF), true)
+    GIFLIB_CFLAGS := $(OJDKBUILD_GIFLIB_CFLAGS)
+    GIFLIB_LDFLAGS := $(OJDKBUILD_GIFLIB_LDFLAGS)
   else
     LIBSPLASHSCREEN_DIRS += $(JDK_TOPDIR)/src/share/native/sun/awt/giflib
     GIFLIB_CFLAGS := -I$(JDK_TOPDIR)/src/share/native/sun/awt/giflib

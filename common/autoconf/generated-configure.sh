@@ -655,6 +655,10 @@ OJDKBUILD_NSS_CFLAGS
 OJDKBUILD_NSS_LDFLAGS
 OJDKBUILD_NSS_BUNDLE_LIB_PATH
 USE_EXTERNAL_LIBGIF
+USE_OJDKBUILD_LIBGIF
+OJDKBUILD_GIFLIB_CFLAGS
+OJDKBUILD_GIFLIB_LDFLAGS
+OJDKBUILD_GIFLIB_BUNDLE_LIB_PATH
 USE_EXTERNAL_LIBJPEG
 ALSA_LIBS
 ALSA_CFLAGS
@@ -35106,6 +35110,10 @@ $as_echo "system not found" >&6; }
   OJDKBUILD_NSS_CFLAGS=`pkg-config nss --cflags --msvc-syntax`
   OJDKBUILD_NSS_LDFLAGS=`pkg-config nss --libs --msvc-syntax`
   OJDKBUILD_NSS_BUNDLE_LIB_PATH=`pkg-config nss --variable=bundle_lib_path`
+  USE_OJDKBUILD_LIBGIF=true
+  OJDKBUILD_GIFLIB_CFLAGS=`pkg-config giflib --cflags --msvc-syntax`
+  OJDKBUILD_GIFLIB_LDFLAGS=`pkg-config giflib --libs --msvc-syntax`
+  OJDKBUILD_GIFLIB_BUNDLE_LIB_PATH=`pkg-config giflib --variable=bundle_lib_path`
   # end ojdkbuild
 
   ###############################################################################
