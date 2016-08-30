@@ -1187,10 +1187,16 @@ endif
 ##########################################################################################
 
 ifndef BUILD_HEADLESS_ONLY
-  LIBSPLASHSCREEN_DIRS := \
-    $(JDK_TOPDIR)/src/share/native/sun/awt/image/jpeg \
-    $(JDK_TOPDIR)/src/share/native/sun/awt/libpng \
-    $(JDK_TOPDIR)/src/share/native/sun/awt/splashscreen
+  ifeq ($(USE_OJDKBUILD_LIBPNG), true)
+    LIBSPLASHSCREEN_DIRS := \
+      $(JDK_TOPDIR)/src/share/native/sun/awt/image/jpeg \
+      $(JDK_TOPDIR)/src/share/native/sun/awt/splashscreen
+  else
+    LIBSPLASHSCREEN_DIRS := \
+      $(JDK_TOPDIR)/src/share/native/sun/awt/image/jpeg \
+      $(JDK_TOPDIR)/src/share/native/sun/awt/libpng \
+      $(JDK_TOPDIR)/src/share/native/sun/awt/splashscreen
+  endif
 
   ifeq ($(USE_EXTERNAL_LIBGIF), true)
     GIFLIB_LDFLAGS := -lgif
@@ -1233,6 +1239,10 @@ ifndef BUILD_HEADLESS_ONLY
     LIBSPLASHSCREEN_CFLAGS += -DWITH_X11 $(X_CFLAGS)
   endif
 
+  ifeq ($(USE_OJDKBUILD_LIBPNG), true)
+    LIBSPLASHSCREEN_CFLAGS += $(OJDKBUILD_LIBPNG_CFLAGS) 
+  endif
+
   LIBSPLASHSCREEN_LDFLAGS_SUFFIX :=
 
   ifneq ($(USE_EXTERNAL_LIBZ), true)
@@ -1255,6 +1265,10 @@ ifndef BUILD_HEADLESS_ONLY
     LIBSPLASHSCREEN_LDFLAGS_SUFFIX += -L$(OPENWIN_LIB)$(OPENJDK_TARGET_CPU_ISADIR) -lX11 -lXext $(LIBM) -lpthread
   else	# .. all other Unixes can use X_LIBS
     LIBSPLASHSCREEN_LDFLAGS_SUFFIX += $(X_LIBS) -lX11 -lXext $(LIBM) -lpthread
+  endif
+
+  ifeq ($(USE_OJDKBUILD_LIBPNG), true)
+    LIBSPLASHSCREEN_LDFLAGS_SUFFIX += $(OJDKBUILD_LIBPNG_LDFLAGS) 
   endif
 
   $(eval $(call SetupNativeCompilation,LIBSPLASHSCREEN, \

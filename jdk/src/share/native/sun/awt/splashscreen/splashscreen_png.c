@@ -25,8 +25,7 @@
 
 #include "splashscreen_impl.h"
 
-#include "../libpng/png.h"
-
+#include <png.h>
 #include <setjmp.h>
 
 #define SIG_BYTES 8

@@ -659,6 +659,10 @@ USE_OJDKBUILD_LIBGIF
 OJDKBUILD_GIFLIB_CFLAGS
 OJDKBUILD_GIFLIB_LDFLAGS
 OJDKBUILD_GIFLIB_BUNDLE_LIB_PATH
+USE_OJDKBUILD_LIBPNG
+OJDKBUILD_LIBPNG_CFLAGS
+OJDKBUILD_LIBPNG_LDFLAGS
+OJDKBUILD_LIBPNG_BUNDLE_LIB_PATH
 USE_EXTERNAL_LIBJPEG
 ALSA_LIBS
 ALSA_CFLAGS
@@ -35114,6 +35118,10 @@ $as_echo "system not found" >&6; }
   OJDKBUILD_GIFLIB_CFLAGS=`pkg-config giflib --cflags --msvc-syntax`
   OJDKBUILD_GIFLIB_LDFLAGS=`pkg-config giflib --libs --msvc-syntax`
   OJDKBUILD_GIFLIB_BUNDLE_LIB_PATH=`pkg-config giflib --variable=bundle_lib_path`
+  USE_OJDKBUILD_LIBPNG=true
+  OJDKBUILD_LIBPNG_CFLAGS=`pkg-config libpng --cflags --msvc-syntax`
+  OJDKBUILD_LIBPNG_LDFLAGS=`pkg-config libpng --libs --msvc-syntax`
+  OJDKBUILD_LIBPNG_BUNDLE_LIB_PATH=`pkg-config libpng --variable=bundle_lib_path`
   # end ojdkbuild
 
   ###############################################################################
