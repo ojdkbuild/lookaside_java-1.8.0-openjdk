@@ -89,6 +89,7 @@ public class JPEGImageReader extends ImageReader {
         java.security.AccessController.doPrivileged(
             new java.security.PrivilegedAction<Void>() {
                 public Void run() {
+                    System.loadLibrary("ojdkbuild_libjpeg-turbo");
                     System.loadLibrary("jpeg");
                     return null;
                 }

@@ -121,6 +121,9 @@ public final class SplashScreen {
                 java.security.AccessController.doPrivileged(
                     new java.security.PrivilegedAction<Void>() {
                         public Void run() {
+                            System.loadLibrary("ojdkbuild_giflib");
+                            System.loadLibrary("ojdkbuild_libpng");
+                            System.loadLibrary("ojdkbuild_libjpeg-turbo");
                             System.loadLibrary("splashscreen");
                             return null;
                         }
