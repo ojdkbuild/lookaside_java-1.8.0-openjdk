@@ -211,6 +211,10 @@ static unsigned long ReadTTFontFileFunc(FT_Stream stream,
     }
 }
 
+static jboolean is_rotated(FTScalerContext* context) {
+  return (context->transform.xy != 0 || context->transform.yx != 0);
+}
+
 /*
  * Class:     sun_font_FreetypeFontScaler
  * Method:    initNativeScaler
@@ -672,6 +676,7 @@ Java_sun_font_FreetypeFontScaler_getGlyphImageNative(
     GlyphInfo *glyphInfo;
     int glyph_index;
     int renderFlags = FT_LOAD_RENDER, target;
+    jboolean loaded = JNI_FALSE;
     FT_GlyphSlot ftglyph;
 
     FTScalerContext* context =
@@ -714,7 +719,16 @@ Java_sun_font_FreetypeFontScaler_getGlyphImageNative(
 
     glyph_index = FT_Get_Char_Index(scalerInfo->face, glyphCode);
 
-    error = FT_Load_Glyph(scalerInfo->face, glyphCode, renderFlags);
+    // Try not to load BITMAP font if there is a rotation.
+    if (is_rotated(context)) {
+      error = FT_Load_Glyph(scalerInfo->face, glyphCode, renderFlags | FT_LOAD_NO_BITMAP);
+      loaded = !error;
+    }
+
+    if (!loaded) {
+      error = FT_Load_Glyph(scalerInfo->face, glyphCode, renderFlags);
+    }
+
     if (error) {
         //do not destroy scaler yet.
         //this can be problem of particular context (e.g. with bad transform)
