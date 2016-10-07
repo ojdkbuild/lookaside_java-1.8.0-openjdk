@@ -413,18 +413,8 @@ Tie#deactivate}
                 // check that a serialization permission has been
                 // set to allow the loading of the Util delegate
                 // which provides access to custom ValueHandler
-                try {
-                    sm.checkPermission(new SerializablePermission(
+                sm.checkPermission(new SerializablePermission(
                         "enableCustomValueHandler"));
-                } catch (SecurityException ex1) {
-                    // Fallback: See if the permission is mis-spelt
-                    try {
-                        sm.checkPermission(new SerializablePermission(
-                            "enableCustomValueHanlder"));
-                    } catch (SecurityException ex2) {
-                        throw ex1; // Throw original exception
-                    }
-                }
             }
         }
     }
