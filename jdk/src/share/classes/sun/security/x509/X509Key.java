@@ -224,7 +224,13 @@ public class X509Key implements PublicKey {
         } catch (NoSuchAlgorithmException e) {
             // Return generic X509Key with opaque key data (see below)
         } catch (InvalidKeySpecException e) {
-            throw new InvalidKeyException(e.getMessage(), e);
+            if (null != e.getMessage() && ("java.security.InvalidKeyException: " +
+                    "EC domain parameters must be " +
+                    "encoded in the algorithm identifier").equals(e.getMessage())) {
+                // named curve not supported
+            } else {
+                throw new InvalidKeyException(e.getMessage(), e);
+            }
         }
 
         /*

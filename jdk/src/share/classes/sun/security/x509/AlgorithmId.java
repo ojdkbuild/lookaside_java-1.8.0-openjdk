@@ -129,7 +129,16 @@ public class AlgorithmId implements Serializable, DerEncoder {
         }
 
         // Decode (parse) the parameters
-        algParams.init(params.toByteArray());
+        try {
+            algParams.init(params.toByteArray());
+        } catch (IOException e) {
+            if (null != e.getMessage() && e.getMessage().startsWith("Unknown named curve: ")) {
+                // named curve not supported
+                algParams = null;
+                return;
+            }
+            throw e;
+        }
     }
 
     /**
