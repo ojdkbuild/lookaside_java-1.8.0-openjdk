@@ -37,11 +37,25 @@ final class SupportedEllipticCurvesExtension extends HelloExtension {
     // the extension value to send in the ClientHello message
     static final SupportedEllipticCurvesExtension DEFAULT;
 
+    private static final boolean fips;
+
     static {
-	int[] ids = new int[] {
-	    // NSS currently only supports these three NIST curves
-	    23, 24, 25
-	};
+        int[] ids;
+        fips = SunJSSE.isFIPS();
+        if (fips == false) {
+            ids = new int[] {
+                // NIST curves first
+                // prefer NIST P-256, rest in order of increasing key length
+                23, 1, 3, 19, 21, 6, 7, 9, 10, 24, 11, 12, 25, 13, 14,
+                // non-NIST curves
+                15, 16, 17, 2, 18, 4, 5, 20, 8, 22,
+            };
+        } else {
+            ids = new int[] {
+                // same as above, but allow only NIST curves in FIPS mode
+                23, 1, 3, 19, 21, 6, 7, 9, 10, 24, 11, 12, 25, 13, 14,
+            };
+        }
         DEFAULT = new SupportedEllipticCurvesExtension(ids);
     }
 
@@ -135,6 +149,10 @@ final class SupportedEllipticCurvesExtension extends HelloExtension {
     static boolean isSupported(int index) {
         if ((index <= 0) || (index >= NAMED_CURVE_OID_TABLE.length)) {
             return false;
+        }
+        if (fips == false) {
+            // in non-FIPS mode, we support all valid indices
+            return true;
         }
         return DEFAULT.contains(index);
     }
