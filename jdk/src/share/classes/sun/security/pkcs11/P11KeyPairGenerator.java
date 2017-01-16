@@ -285,11 +285,11 @@ final class P11KeyPairGenerator extends KeyPairGeneratorSpi {
                     // this restriction is in the spec for DSA
                     // since we currently use DSA parameters for DH as well,
                     // it also applies to DH if no parameters are specified
-                    if ((keySize != 2048) &&
+                    if ((keySize != 2048) && (keySize != 4096) &&
                         ((keySize > 1024) || ((keySize & 0x3f) != 0))) {
                         throw new InvalidAlgorithmParameterException(algorithm +
                             " key must be multiples of 64 if less than 1024 bits" +
-                            ", or 2048 bits. " +
+                            ", or 2048 bits, or 4096 bits. " +
                             "The specific key size " +
                             keySize + " is not supported");
                     }
