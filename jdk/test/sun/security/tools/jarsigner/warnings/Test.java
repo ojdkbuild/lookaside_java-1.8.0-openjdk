@@ -22,11 +22,6 @@
  */
 
 import jdk.testlibrary.OutputAnalyzer;
-import jdk.testlibrary.ProcessTools;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 
 /**
  * Base class.

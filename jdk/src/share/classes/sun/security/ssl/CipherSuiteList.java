@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002, 2012, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2002, 2016, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -74,24 +74,12 @@ final class CipherSuiteList {
             throw new IllegalArgumentException("CipherSuites may not be null");
         }
         cipherSuites = new ArrayList<CipherSuite>(names.length);
-        // refresh available cache once if a CipherSuite is not available
-        // (maybe new JCE providers have been installed)
-        boolean refreshed = false;
         for (int i = 0; i < names.length; i++) {
             String suiteName = names[i];
             CipherSuite suite = CipherSuite.valueOf(suiteName);
             if (suite.isAvailable() == false) {
-                if (refreshed == false) {
-                    // clear the cache so that the isAvailable() call below
-                    // does a full check
-                    clearAvailableCache();
-                    refreshed = true;
-                }
-                // still missing?
-                if (suite.isAvailable() == false) {
-                    throw new IllegalArgumentException("Cannot support "
-                        + suiteName + " with currently installed providers");
-                }
+                throw new IllegalArgumentException("Cannot support "
+                    + suiteName + " with currently installed providers");
             }
             cipherSuites.add(suite);
         }
@@ -124,20 +112,15 @@ final class CipherSuiteList {
     boolean containsEC() {
         if (containsEC == null) {
             for (CipherSuite c : cipherSuites) {
-                switch (c.keyExchange) {
-                case K_ECDH_ECDSA:
-                case K_ECDH_RSA:
-                case K_ECDHE_ECDSA:
-                case K_ECDHE_RSA:
-                case K_ECDH_ANON:
+                if (c.keyExchange.isEC) {
                     containsEC = true;
                     return true;
-                default:
-                    break;
                 }
             }
+
             containsEC = false;
         }
+
         return containsEC;
     }
 
@@ -194,17 +177,5 @@ final class CipherSuiteList {
             i += 2;
         }
         s.putBytes16(suiteBytes);
-    }
-
-    /**
-     * Clear cache of available ciphersuites. If we support all ciphers
-     * internally, there is no need to clear the cache and calling this
-     * method has no effect.
-     */
-    static synchronized void clearAvailableCache() {
-        if (CipherSuite.DYNAMIC_AVAILABILITY) {
-            CipherSuite.BulkCipher.clearAvailableCache();
-            JsseJce.clearEcAvailable();
-        }
     }
 }
