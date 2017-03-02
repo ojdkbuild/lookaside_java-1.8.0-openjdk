@@ -196,7 +196,7 @@ endif
               AccessBridgeEventHandler.cpp, \
           LANG := C++, \
           OPTIMIZATION := LOW, \
-          CFLAGS := $(filter-out -MD, $(CFLAGS_JDKLIB)) -MT \
+          CFLAGS := $(filter-out $(OJDKBUILD_LIBC_DYNAMIC_FLAG), $(CFLAGS_JDKLIB)) $(OJDKBUILD_LIBC_STATIC_FLAG) \
               -DACCESSBRIDGE_ARCH_$3 \
               -I$(JDK_OUTPUTDIR)/gensrc_headers_ab/$3, \
           LDFLAGS := $(LDFLAGS_JDKLIB) kernel32.lib user32.lib gdi32.lib \

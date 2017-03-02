@@ -151,7 +151,7 @@ COMPILER_NAME=VS2012
 
 # By default, we do not want to use the debug version of the msvcrt.dll file
 #   but if MFC_DEBUG is defined in the environment it will be used.
-MS_RUNTIME_OPTION = /MD
+MS_RUNTIME_OPTION = $(OJDKBUILD_LIBC_DYNAMIC_FLAG)
 !if "$(MFC_DEBUG)" == "true"
 MS_RUNTIME_OPTION = /MTd /D "_DEBUG"
 !endif

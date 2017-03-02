@@ -40,9 +40,9 @@ SADIS=../../../share/native/sadis.c
 # These do not need to be optimized (don't run a lot of code) and it
 # will be useful to have the assertion checks in place
 
-CFLAGS32=/nologo /MD /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_WINDOWS" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /YX /FD /GZ /c
+CFLAGS32=/nologo $(OJDKBUILD_LIBC_DYNAMIC_FLAG) /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_WINDOWS" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /YX /FD /GZ /c
 
-CFLAGS64=/nologo /MD /W3 /GX /Od /D "WIN32" /D "WIN64" /D "_WINDOWS" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /YX /FD /c
+CFLAGS64=/nologo $(OJDKBUILD_LIBC_DYNAMIC_FLAG) /W3 /GX /Od /D "WIN32" /D "WIN64" /D "_WINDOWS" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /YX /FD /c
 
 LIBS32= $(WINDBG_LIB32)/dbgeng.lib  \
      /nologo /subsystem:console /debug /machine:I386

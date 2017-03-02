@@ -129,7 +129,7 @@ define SetupLauncher
 
   $1_CFLAGS := $(CFLAGS_JDKEXE)
   ifeq ($(10), true)
-    $1_CFLAGS := $(filter-out -MD, $(CFLAGS_JDKEXE))
+    $1_CFLAGS := $(filter-out $(OJDKBUILD_LIBC_DYNAMIC_FLAG), $(CFLAGS_JDKEXE)) $(OJDKBUILD_LIBC_STATIC_FLAG)
   endif
 
   # The linker on older SuSE distros (e.g. on SLES 10) complains with:
@@ -137,7 +137,6 @@ define SetupLauncher
   # if feeded with a version script which contains named tags.
   ifeq ($(USING_BROKEN_SUSE_LD),yes)
     ifneq ($(wildcard $(JDK_TOPDIR)/make/mapfiles/launchers/mapfile-$(OPENJDK_TARGET_CPU).anonymous), )
-      $1_MAPFILE := $(JDK_TOPDIR)/make/mapfiles/launchers/mapfile-$(OPENJDK_TARGET_CPU).anonymous
     else
       $1_MAPFILE :=
     endif
