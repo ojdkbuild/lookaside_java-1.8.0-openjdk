@@ -1252,7 +1252,7 @@ ifndef BUILD_HEADLESS_ONLY
 
   ifneq ($(USE_EXTERNAL_LIBZ), true)
   ifneq ($(USE_OJDKBUILD_LIBZ), true)
-    LIBSPLASHSCREEN_DIRS += $(JDK_TOPDIR)/src/share/native/java/util/zip/zlib-1.2.8
+    LIBSPLASHSCREEN_DIRS += $(JDK_TOPDIR)/src/share/native/java/util/zip/zlib
   endif
     LIBSPLASHSCREEN_CFLAGS += $(ZLIB_CPPFLAGS)
   endif

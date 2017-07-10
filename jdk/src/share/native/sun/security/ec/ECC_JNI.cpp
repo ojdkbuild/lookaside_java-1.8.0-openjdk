@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009, 2014, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2009, 2017, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -221,7 +221,7 @@ cleanup:
  */
 JNIEXPORT jbyteArray
 JNICALL Java_sun_security_ec_ECDSASignature_signDigest
-  (JNIEnv *env, jclass UNUSED(clazz), jbyteArray digest, jbyteArray privateKey, jbyteArray encodedParams, jbyteArray seed)
+  (JNIEnv *env, jclass UNUSED(clazz), jbyteArray digest, jbyteArray privateKey, jbyteArray encodedParams, jbyteArray seed, jint timing)
 {
     jbyte* pDigestBuffer = NULL;
     jint jDigestLength = env->GetArrayLength(digest);
@@ -290,8 +290,7 @@ JNICALL Java_sun_security_ec_ECDSASignature_signDigest
         != SECSuccess) {    
 #else    
     if (ECDSA_SignDigest(&privKey, &signature_item, &digest_item,
-        (unsigned char *) pSeedBuffer, jSeedLength, 0) != SECSuccess) {
-#endif            
+        (unsigned char *) pSeedBuffer, jSeedLength, 0, timing) != SECSuccess) {
         ThrowException(env, KEY_EXCEPTION);
         goto cleanup;
     }

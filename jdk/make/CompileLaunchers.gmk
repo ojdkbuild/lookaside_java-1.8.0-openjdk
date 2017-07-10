@@ -433,7 +433,7 @@ else ifeq ($(USE_OJDKBUILD_LIBZ), true)
   UNPACKEXE_CFLAGS := ${OJDKBUILD_ZLIB_CFLAGS}
   UNPACKEXE_ZIPOBJS := ${OJDKBUILD_ZLIB_LDFLAGS}
 else
-  UNPACKEXE_CFLAGS := -I$(JDK_TOPDIR)/src/share/native/java/util/zip/zlib-1.2.8
+  UNPACKEXE_CFLAGS := -I$(JDK_TOPDIR)/src/share/native/java/util/zip/zlib
   UNPACKEXE_ZIPOBJS := $(JDK_OUTPUTDIR)/objs/libzip/zcrc32$(OBJ_SUFFIX) \
       $(JDK_OUTPUTDIR)/objs/libzip/deflate$(OBJ_SUFFIX) \
       $(JDK_OUTPUTDIR)/objs/libzip/trees$(OBJ_SUFFIX) \
