@@ -291,6 +291,7 @@ JNICALL Java_sun_security_ec_ECDSASignature_signDigest
 #else    
     if (ECDSA_SignDigest(&privKey, &signature_item, &digest_item,
         (unsigned char *) pSeedBuffer, jSeedLength, 0, timing) != SECSuccess) {
+#endif
         ThrowException(env, KEY_EXCEPTION);
         goto cleanup;
     }
