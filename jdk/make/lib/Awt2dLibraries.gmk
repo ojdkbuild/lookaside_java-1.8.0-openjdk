@@ -737,7 +737,7 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBJPEG, \
     LIBRARY := jpeg, \
     OUTPUT_DIR := $(INSTALL_LIBRARIES_HERE), \
     SRC := $(BUILD_LIBJPEG_CLOSED_SRC) \
-        $(JDK_TOPDIR)/../../../deps/libjpeg-turbo/resources/src_jdk8, \
+        $(JDK_TOPDIR)/src/share/native/sun/awt/image/jpeg, \
     LANG := C, \
     OPTIMIZATION := HIGHEST, \
     CFLAGS := $(CFLAGS_JDKLIB) \
