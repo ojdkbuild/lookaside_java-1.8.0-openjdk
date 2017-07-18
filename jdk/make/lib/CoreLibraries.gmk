@@ -402,12 +402,8 @@ ifeq ($(OPENJDK_TARGET_OS), macosx)
 endif
 
 ifneq ($(USE_EXTERNAL_LIBZ), true)
-<<<<<<< HEAD
 ifneq ($(USE_OJDKBUILD_LIBZ), true)
-  BUILD_LIBJLI_SRC_DIRS += $(JDK_TOPDIR)/src/share/native/java/util/zip/zlib
-=======
   BUILD_LIBJLI_SRC_DIRS += $(JDK_TOPDIR)/src/share/native/java/util/zip/zlib-1.2.8
->>>>>>> private-rh-8u141-embargo-lookaside-1
   LIBJLI_CFLAGS += $(ZLIB_CPPFLAGS)
   BUILD_LIBJLI_FILES += \
       inflate.c \
