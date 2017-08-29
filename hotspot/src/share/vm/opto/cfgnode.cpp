@@ -35,6 +35,7 @@
 #include "opto/phaseX.hpp"
 #include "opto/regmask.hpp"
 #include "opto/runtime.hpp"
+#include "opto/shenandoahSupport.hpp"
 #include "opto/subnode.hpp"
 
 // Portions of code courtesy of Clifford Click
@@ -587,6 +588,9 @@ Node *RegionNode::Ideal(PhaseGVN *phase, bool can_reshape) {
             in = n->in(1);               // replaced by unique input
             if( n->as_Phi()->is_unsafe_data_reference(in) )
               in = phase->C->top();      // replaced by top
+          }
+          if (n->outcnt() == 0) {
+            in = phase->C->top();
           }
           igvn->replace_node(n, in);
         }
@@ -1149,6 +1153,20 @@ Node *PhiNode::Identity( PhaseTransform *phase ) {
     if (id != NULL)  return id;
   }
 
+  if (phase->is_IterGVN()) {
+    // A memory Phi could only have data inputs if that Phi was input
+    // to a MergeMem and MergeMemNode::Ideal() found that it's
+    // equivalent to the base memory Phi. If data uses are removed,
+    // the Phi will be removed as well. If one of the Phi inputs has
+    // changed in the meantime (shenandoah write barrier moved out of
+    // loop for instance), that input is disconnected from the memory
+    // graph.
+    Node* other_phi = has_only_data_users();
+    if (other_phi != NULL) {
+      return other_phi;
+    }
+  }
+
   return this;                     // No identity
 }
 
@@ -1262,7 +1280,7 @@ static Node *is_x2logic( PhaseGVN *phase, PhiNode *phi, int true_path ) {
   } else return NULL;
 
   // Build int->bool conversion
-  Node *n = new (phase->C) Conv2BNode( cmp->in(1) );
+  Node *n = new (phase->C) Conv2BNode(ShenandoahBarrierNode::skip_through_barrier(cmp->in(1)));
   if( flipped )
     n = new (phase->C) XorINode( phase->transform(n), phase->intcon(1) );
 
@@ -1628,7 +1646,12 @@ Node *PhiNode::Ideal(PhaseGVN *phase, bool can_reshape) {
         if (can_reshape && igvn != NULL) {
           igvn->_worklist.push(r);
         }
-        set_req(j, top);        // Nuke it down
+        // Nuke it down
+        if (can_reshape) {
+          set_req_X(j, top, igvn);
+        } else {
+          set_req(j, top);
+        }
         progress = this;        // Record progress
       }
     }
@@ -2097,6 +2120,30 @@ uint JumpProjNode::hash() const {
 uint JumpProjNode::cmp( const Node &n ) const {
   return ProjNode::cmp(n) &&
     _dest_bci == ((JumpProjNode&)n)._dest_bci;
+}
+
+PhiNode* PhiNode::has_only_data_users() const {
+  if (bottom_type() != Type::MEMORY || adr_type() == TypePtr::BOTTOM || outcnt() == 0) {
+    return NULL;
+  }
+  for (DUIterator_Fast imax, i = fast_outs(imax); i < imax; i++) {
+    Node* u = fast_out(i);
+    if (!u->is_Load() && u->Opcode() != Op_ShenandoahReadBarrier) {
+      return NULL;
+    }
+  }
+  Node* r = in(0);
+  if (r == NULL) {
+    return NULL;
+  }
+  for (DUIterator_Fast imax, i = r->fast_outs(imax); i < imax; i++) {
+    Node* u = r->fast_out(i);
+    if (u != this && u->is_Phi() && u->bottom_type() == Type::MEMORY &&
+        u->adr_type() == TypePtr::BOTTOM) {
+      return u->as_Phi();
+    }
+  }
+  return NULL;
 }
 
 #ifndef PRODUCT

@@ -93,6 +93,12 @@
   template(HeapIterateOperation)                  \
   template(ReportJavaOutOfMemory)                 \
   template(JFRCheckpoint)                         \
+  template(ShenandoahFullGC)                      \
+  template(ShenandoahInitMark)                    \
+  template(ShenandoahFinalMarkStartEvac)          \
+  template(ShenandoahVerifyHeapAfterEvacuation)   \
+  template(ShenandoahInitUpdateRefs)              \
+  template(ShenandoahFinalUpdateRefs)             \
   template(Exit)                                  \
   template(LinuxDllLoad)                          \
   template(RotateGCLog)                           \
