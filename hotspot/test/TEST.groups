@@ -135,6 +135,15 @@ hotspot_gc = \
   sanity/ExecuteInternalVMTests.java \
   -gc/g1/TestGreyReclaimedHumongousObjects.java
 
+hotspot_gc_shenandoah = \
+  gc/shenandoah/
+
+hotspot_fast_gc_shenandoah = \
+  gc/shenandoah/options/ \
+  gc/shenandoah/compiler/ \
+  gc/shenandoah/TestAllocLargeObjOOM.java \
+  gc/shenandoah/TestAllocSmallObjOOM.java
+
 hotspot_runtime = \
   sanity/ExecuteInternalVMTests.java
 
