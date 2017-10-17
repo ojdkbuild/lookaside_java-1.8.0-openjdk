@@ -40,7 +40,9 @@ SurrogateLockerThread* ShenandoahConcurrentThread::_slt = NULL;
 ShenandoahConcurrentThread::ShenandoahConcurrentThread() :
   ConcurrentGCThread(),
   _full_gc_lock(Mutex::leaf, "ShenandoahFullGC_lock", true),
+  _conc_gc_lock(Mutex::leaf, "ShenandoahConcGC_lock", true),
   _do_full_gc(0),
+  _do_concurrent_gc(0),
   _full_gc_cause(GCCause::_no_cause_specified),
   _graceful_shutdown(0)
 {
@@ -66,23 +68,50 @@ void ShenandoahConcurrentThread::run() {
 
   ShenandoahHeap* heap = ShenandoahHeap::heap();
 
-  while (! _should_terminate) {
-    if (in_graceful_shutdown()) {
-      break;
-    } else if (is_full_gc()) {
+  double last_shrink_time = os::elapsedTime();
+
+  // Shrink period avoids constantly polling regions for shrinking.
+  // Having a period 10x lower than the delay would mean we hit the
+  // shrinking with lag of less than 1/10-th of true delay.
+  // ShenandoahUncommitDelay is in msecs, but shrink_period is in seconds.
+  double shrink_period = (double)ShenandoahUncommitDelay / 1000 / 10;
+
+  while (!in_graceful_shutdown() && !_should_terminate) {
+    bool conc_gc_requested = is_conc_gc_requested() || heap->shenandoahPolicy()->should_start_concurrent_mark(heap->used(), heap->capacity());
+    bool full_gc_requested = is_full_gc();
+    bool gc_requested = conc_gc_requested || full_gc_requested;
+
+    if (full_gc_requested) {
       service_fullgc_cycle();
-    } else if (heap->shenandoahPolicy()->should_start_concurrent_mark(heap->used(), heap->capacity())) {
+    } else if (conc_gc_requested) {
       service_normal_cycle();
+    }
+
+    if (gc_requested) {
+      // Counters are already updated on allocation path. Makes sense to update them
+      // them here only when GC happened.
+      heap->monitoring_support()->update_counters();
+
+      // Coming out of (cancelled) concurrent GC, reset these for sanity
       if (heap->is_evacuation_in_progress()) {
         heap->set_evacuation_in_progress_concurrently(false);
       }
+
       if (heap->is_update_refs_in_progress()) {
         heap->set_update_refs_in_progress(false);
       }
+
+      reset_conc_gc_requested();
     } else {
       Thread::current()->_ParkEvent->park(10);
     }
-    heap->monitoring_support()->update_counters();
+
+    // Try to uncommit stale regions
+    double current = os::elapsedTime();
+    if (current - last_shrink_time > shrink_period) {
+      heap->handle_heap_shrinkage();
+      last_shrink_time = current;
+    }
 
     // Make sure the _do_full_gc flag changes are seen.
     OrderAccess::storeload();
@@ -135,7 +164,7 @@ void ShenandoahConcurrentThread::service_normal_cycle() {
                                                                               (uint) Threads::number_of_non_daemon_threads());
     ShenandoahWorkerScope scope(workers, n_workers);
 
-    GCTraceTime time("Concurrent marking", ShenandoahLogInfo, gc_timer, gc_tracer->gc_id(), true);
+    GCTraceTime time("Concurrent marking", PrintGC, gc_timer, gc_tracer->gc_id(), true);
     TraceCollectorStats tcs(heap->monitoring_support()->concurrent_collection_counters());
     ShenandoahHeap::heap()->concurrentMark()->mark_from_roots();
   }
@@ -161,7 +190,7 @@ void ShenandoahConcurrentThread::service_normal_cycle() {
     // If not cancelled, can try to concurrently pre-clean
     if (ShenandoahPreclean) {
       if (heap->concurrentMark()->process_references()) {
-        GCTraceTime time("Concurrent precleaning", ShenandoahLogInfo, gc_timer, gc_tracer->gc_id(), true);
+        GCTraceTime time("Concurrent precleaning", PrintGC, gc_timer, gc_tracer->gc_id(), true);
         ShenandoahGCPhase conc_preclean(ShenandoahCollectorPolicy::conc_preclean);
 
         heap->concurrentMark()->preclean_weak_refs();
@@ -189,37 +218,48 @@ void ShenandoahConcurrentThread::service_normal_cycle() {
     reset_full_gc();
   }
 
-  // Continue concurrent evacuation:
-  {
+  // Perform concurrent evacuation, if required.
+  // This phase can be skipped if there is nothing to evacuate. If so, evac_in_progress would be unset
+  // by collection set preparation code.
+  if (heap->is_evacuation_in_progress()) {
     // Setup workers for concurrent evacuation phase
     FlexibleWorkGang* workers = heap->workers();
     uint n_workers = ShenandoahCollectorPolicy::calc_workers_for_conc_evacuation(workers->active_workers(),
                                                                                  (uint) Threads::number_of_non_daemon_threads());
     ShenandoahWorkerScope scope(workers, n_workers);
 
-    GCTraceTime time("Concurrent evacuation", ShenandoahLogInfo, gc_timer, gc_tracer->gc_id(), true);
+    GCTraceTime time("Concurrent evacuation", PrintGC, gc_timer, gc_tracer->gc_id(), true);
     TraceCollectorStats tcs(heap->monitoring_support()->concurrent_collection_counters());
     heap->do_evacuation();
+
+    // Allocations happen during evacuation, record peak after the phase:
+    heap->shenandoahPolicy()->record_peak_occupancy();
+
+    // Do an update-refs phase if required.
+    if (check_cancellation()) return;
   }
 
-  // Allocations happen during evacuation, record peak after the phase:
-  heap->shenandoahPolicy()->record_peak_occupancy();
-
-  // Do an update-refs phase if required.
-  if (check_cancellation()) return;
-
+  // Perform update-refs phase, if required.
+  // This phase can be skipped if there was nothing evacuated. If so, need_update_refs would be unset
+  // by collection set preparation code. However, adaptive heuristics need to record "success" when
+  // this phase is skipped. Therefore, we conditionally execute all ops, leaving heuristics adjustments
+  // intact.
   if (heap->shenandoahPolicy()->should_start_update_refs()) {
 
-    {
-      ShenandoahGCPhase total_phase(ShenandoahCollectorPolicy::total_pause_gross);
-      ShenandoahGCPhase init_update_refs_phase(ShenandoahCollectorPolicy::init_update_refs_gross);
-      VM_ShenandoahInitUpdateRefs init_update_refs;
-      VMThread::execute(&init_update_refs);
-    }
+    bool do_it = heap->need_update_refs();
+    if (do_it) {
+      {
+        TraceCollectorStats tcs(heap->monitoring_support()->stw_collection_counters());
+        ShenandoahGCPhase total_phase(ShenandoahCollectorPolicy::total_pause_gross);
+        ShenandoahGCPhase init_update_refs_phase(ShenandoahCollectorPolicy::init_update_refs_gross);
+        VM_ShenandoahInitUpdateRefs init_update_refs;
+        VMThread::execute(&init_update_refs);
+      }
 
-    {
-      GCTraceTime time("Concurrent update references ", ShenandoahLogInfo, gc_timer, gc_tracer->gc_id(), true);
-      heap->concurrent_update_heap_references();
+      {
+        GCTraceTime time("Concurrent update references ", PrintGC, gc_timer, gc_tracer->gc_id(), true);
+        heap->concurrent_update_heap_references();
+      }
     }
 
     // Allocations happen during update-refs, record peak after the phase:
@@ -239,11 +279,18 @@ void ShenandoahConcurrentThread::service_normal_cycle() {
       heap->shenandoahPolicy()->record_uprefs_success();
     }
 
-    {
+    if (do_it) {
+      TraceCollectorStats tcs(heap->monitoring_support()->stw_collection_counters());
       ShenandoahGCPhase total(ShenandoahCollectorPolicy::total_pause_gross);
       ShenandoahGCPhase final_update_refs_phase(ShenandoahCollectorPolicy::final_update_refs_gross);
       VM_ShenandoahFinalUpdateRefs final_update_refs;
       VMThread::execute(&final_update_refs);
+    }
+  } else {
+    // If update-refs were skipped, need to do another verification pass after evacuation.
+    if (ShenandoahVerify && !check_cancellation()) {
+      VM_ShenandoahVerifyHeapAfterEvacuation verify_after_evacuation;
+      VMThread::execute(&verify_after_evacuation);
     }
   }
 
@@ -255,7 +302,7 @@ void ShenandoahConcurrentThread::service_normal_cycle() {
   }
 
   {
-    GCTraceTime time("Concurrent reset bitmaps", ShenandoahLogInfo, gc_timer, gc_tracer->gc_id(), true);
+    GCTraceTime time("Concurrent reset bitmaps", PrintGC, gc_timer, gc_tracer->gc_id(), true);
     ShenandoahGCPhase phase(ShenandoahCollectorPolicy::conc_reset_bitmaps);
     FlexibleWorkGang* workers = heap->workers();
     ShenandoahPushWorkerScope scope(workers, heap->max_workers());
@@ -310,7 +357,7 @@ void ShenandoahConcurrentThread::service_fullgc_cycle() {
       heap->shenandoahPolicy()->record_user_requested_gc();
     }
 
-    TraceCollectorStats tcs(heap->monitoring_support()->full_collection_counters());
+    TraceCollectorStats tcs(heap->monitoring_support()->full_stw_collection_counters());
     TraceMemoryManagerStats tmms(true, _full_gc_cause);
     VM_ShenandoahFullGC full_gc(_full_gc_cause);
     VMThread::execute(&full_gc);
@@ -368,6 +415,22 @@ bool ShenandoahConcurrentThread::try_set_full_gc() {
 
 bool ShenandoahConcurrentThread::is_full_gc() {
   return OrderAccess::load_acquire(&_do_full_gc) == 1;
+}
+
+bool ShenandoahConcurrentThread::is_conc_gc_requested() {
+  return OrderAccess::load_acquire(&_do_concurrent_gc) == 1;
+}
+
+void ShenandoahConcurrentThread::do_conc_gc() {
+  OrderAccess::release_store_fence(&_do_concurrent_gc, 1);
+  MonitorLockerEx ml(&_conc_gc_lock);
+  ml.wait();
+}
+
+void ShenandoahConcurrentThread::reset_conc_gc_requested() {
+  OrderAccess::release_store_fence(&_do_concurrent_gc, 0);
+  MonitorLockerEx ml(&_conc_gc_lock);
+  ml.notify_all();
 }
 
 void ShenandoahConcurrentThread::print() const {

@@ -2341,7 +2341,7 @@ void PhaseIdealLoop::build_and_optimize(bool do_split_ifs, bool skip_loop_opts) 
       C->set_major_progress();
     }
 
-    if (!C->major_progress()) {
+    if (UseShenandoahGC && !C->major_progress()) {
       shenandoah_pin_and_expand_barriers();
     }
 
@@ -3301,8 +3301,10 @@ Node *PhaseIdealLoop::get_late_ctrl( Node *n, Node *early ) {
     }
     while(worklist.size() != 0 && LCA != early) {
       Node* s = worklist.pop();
-      if (s->is_Load() || s->is_ShenandoahBarrier() || s->Opcode() == Op_SafePoint ||
-          (s->is_CallStaticJava() && s->as_CallStaticJava()->uncommon_trap_request() != 0)) {
+      if (s->is_Load() ||
+          (UseShenandoahGC &&
+           (s->is_ShenandoahBarrier() || s->Opcode() == Op_SafePoint ||
+            (s->is_CallStaticJava() && s->as_CallStaticJava()->uncommon_trap_request() != 0)))) {
         continue;
       } else if (s->is_MergeMem()) {
         for (DUIterator_Fast imax, i = s->fast_outs(imax); i < imax; i++) {
@@ -3591,7 +3593,8 @@ void PhaseIdealLoop::build_loop_late_post( Node *n ) {
   // which can inhibit range check elimination.
   if (least != early) {
     Node* ctrl_out = least->unique_ctrl_out();
-    if (ctrl_out && ctrl_out->is_Loop() &&
+    if (UseShenandoahGC &&
+        ctrl_out && ctrl_out->is_Loop() &&
         least == ctrl_out->in(LoopNode::EntryControl)) {
       Node* new_ctrl = least;
       if (find_predicate_insertion_point(new_ctrl, Deoptimization::Reason_loop_limit_check) != NULL) {
@@ -3603,13 +3606,19 @@ void PhaseIdealLoop::build_loop_late_post( Node *n ) {
         assert(is_dominator(early, c), "least != early so we can move up the dominator tree");
         new_ctrl = c;
       }
-      if (new_ctrl != ctrl_out) {
+      if (new_ctrl != least) {
         least = new_ctrl;
       } else if (ctrl_out->is_CountedLoop()) {
         Node* least_dom = idom(least);
         if (get_loop(least_dom)->is_member(get_loop(least))) {
           least = least_dom;
         }
+      }
+    } else if (ctrl_out && ctrl_out->is_CountedLoop() &&
+               least == ctrl_out->in(LoopNode::EntryControl)) {
+      Node* least_dom = idom(least);
+      if (get_loop(least_dom)->is_member(get_loop(least))) {
+        least = least_dom;
       }
     }
   }
@@ -3802,6 +3811,7 @@ void PhaseIdealLoop::dump( IdealLoopTree *loop, uint idx, Node_List &rpo_list ) 
     }
   }
 }
+#endif
 
 // Collect a R-P-O for the whole CFG.
 // Result list is in post-order (scan backwards for RPO)
@@ -3824,7 +3834,6 @@ void PhaseIdealLoop::rpo( Node *start, Node_Stack &stk, VectorSet &visited, Node
     }
   }
 }
-#endif
 
 
 //=============================================================================

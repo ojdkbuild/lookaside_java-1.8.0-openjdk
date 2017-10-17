@@ -26,7 +26,7 @@
 ##
 ## @test
 ## @summary test JNI critical arrays support in Shenandoah
-## @run shell/timeout=30 ShenandoahJNICritical.sh
+## @run shell/timeout=120 ShenandoahJNICritical.sh
 ##
 
 if [ "${TESTSRC}" = "" ]
@@ -63,7 +63,7 @@ $gcc_cmd -O1 -DLINUX -fPIC -shared \
     ${TESTSRC}${FS}libShenandoahJNICritical.c
 
 # run the java test in the background
-cmd="${TESTJAVA}${FS}bin${FS}java -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=aggressive \
+cmd="${TESTJAVA}${FS}bin${FS}java -XX:+UseShenandoahGC -XX:+UnlockDiagnosticVMOptions -XX:ShenandoahGCHeuristics=aggressive \
     -Djava.library.path=${THIS_DIR}${FS} ShenandoahJNICritical"
 
 echo "$cmd"

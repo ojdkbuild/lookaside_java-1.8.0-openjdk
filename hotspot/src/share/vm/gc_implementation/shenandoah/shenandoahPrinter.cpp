@@ -23,18 +23,20 @@
 
 #include "precompiled.hpp"
 
+#ifdef ASSERT
+
 #include "memory/allocation.hpp"
 #include "gc_implementation/shenandoah/shenandoahHeap.hpp"
 #include "gc_implementation/shenandoah/shenandoahHeap.inline.hpp"
 #include "gc_implementation/shenandoah/shenandoahPrinter.hpp"
 
-class PrintAllRefsOopClosure: public ExtendedOopClosure {
+class ShenandoahPrintAllRefsOopClosure: public ExtendedOopClosure {
 private:
   int _index;
   const char* _prefix;
 
 public:
-  PrintAllRefsOopClosure(const char* prefix) : _index(0), _prefix(prefix) {}
+  ShenandoahPrintAllRefsOopClosure(const char* prefix) : _index(0), _prefix(prefix) {}
 
 private:
   template <class T>
@@ -68,11 +70,11 @@ public:
   }
 };
 
-class PrintAllRefsObjectClosure : public ObjectClosure {
+class ShenandoahPrintAllRefsObjectClosure : public ObjectClosure {
   const char* _prefix;
 
 public:
-  PrintAllRefsObjectClosure(const char* prefix) : _prefix(prefix) {}
+  ShenandoahPrintAllRefsObjectClosure(const char* prefix) : _prefix(prefix) {}
 
   void do_object(oop p) {
     if (ShenandoahHeap::heap()->is_in(p)) {
@@ -80,7 +82,7 @@ public:
                     _prefix, p2i(p),
                     BOOL_TO_STR(ShenandoahHeap::heap()->is_marked_complete(p)),
                     p->klass()->internal_name(), p2i(p->klass()));
-      PrintAllRefsOopClosure cl(_prefix);
+      ShenandoahPrintAllRefsOopClosure cl(_prefix);
       p->oop_iterate(&cl);
     }
   }
@@ -92,10 +94,12 @@ void ShenandoahPrinter::print_all_refs(const char* prefix) {
 
   _heap->ensure_parsability(false);
 
-  PrintAllRefsOopClosure cl(prefix);
+  ShenandoahPrintAllRefsOopClosure cl(prefix);
   _heap->roots_iterate(&cl);
 
   tty->print_cr("heap references:");
-  PrintAllRefsObjectClosure cl2(prefix);
+  ShenandoahPrintAllRefsObjectClosure cl2(prefix);
   _heap->object_iterate(&cl2);
 }
+
+#endif

@@ -28,8 +28,7 @@
 #include "gc_implementation/shenandoah/shenandoahHeap.inline.hpp"
 #include "runtime/interfaceSupport.hpp"
 
-class UpdateRefsForOopClosure: public ExtendedOopClosure {
-
+class ShenandoahUpdateRefsForOopClosure: public ExtendedOopClosure {
 private:
   ShenandoahHeap* _heap;
   template <class T>
@@ -37,18 +36,9 @@ private:
     _heap->maybe_update_oop_ref(p);
   }
 public:
-  UpdateRefsForOopClosure() {
-    _heap = ShenandoahHeap::heap();
-  }
-
-  void do_oop(oop* p)       {
-    do_oop_work(p);
-  }
-
-  void do_oop(narrowOop* p) {
-    do_oop_work(p);
-  }
-
+  ShenandoahUpdateRefsForOopClosure() : _heap(ShenandoahHeap::heap()) {}
+  void do_oop(oop* p)       { do_oop_work(p); }
+  void do_oop(narrowOop* p) { do_oop_work(p); }
 };
 
 ShenandoahBarrierSet::ShenandoahBarrierSet(ShenandoahHeap* heap) :
@@ -173,18 +163,21 @@ void ShenandoahBarrierSet::write_ref_array_work(MemRegion r) {
   ShouldNotReachHere();
 }
 
+template <class T>
+void ShenandoahBarrierSet::write_ref_array_loop(HeapWord* start, size_t count) {
+  ShenandoahUpdateRefsForOopClosure cl;
+  T* dst = (T*) start;
+  for (size_t i = 0; i < count; i++) {
+    cl.do_oop(dst++);
+  }
+}
+
 void ShenandoahBarrierSet::write_ref_array(HeapWord* start, size_t count) {
   if (! need_update_refs_barrier()) return;
   if (UseCompressedOops) {
-    narrowOop* dst = (narrowOop*) start;
-    for (size_t i = 0; i < count; i++, dst++) {
-      _heap->maybe_update_oop_ref(dst);
-    }
+    write_ref_array_loop<narrowOop>(start, count);
   } else {
-    oop* dst = (oop*) start;
-    for (size_t i = 0; i < count; i++, dst++) {
-      _heap->maybe_update_oop_ref(dst);
-    }
+    write_ref_array_loop<oop>(start, count);
   }
 }
 
@@ -291,7 +284,7 @@ void ShenandoahBarrierSet::write_region_work(MemRegion mr) {
 
   oop obj = oop(mr.start());
   assert(obj->is_oop(), "must be an oop");
-  UpdateRefsForOopClosure cl;
+  ShenandoahUpdateRefsForOopClosure cl;
   obj->oop_iterate(&cl);
 }
 

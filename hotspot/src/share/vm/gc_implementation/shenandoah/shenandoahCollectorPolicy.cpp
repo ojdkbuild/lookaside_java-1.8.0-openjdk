@@ -85,6 +85,8 @@ protected:
 
   size_t _bytes_in_cset;
 
+  double _last_cycle_end;
+
 public:
 
   ShenandoahHeuristics();
@@ -108,7 +110,7 @@ public:
   }
 
   virtual void record_cycle_end() {
-    // Do nothing
+    _last_cycle_end = os::elapsedTime();
   }
 
   virtual void record_phase_start(ShenandoahCollectorPolicy::TimingPhase phase) {
@@ -203,6 +205,10 @@ public:
     // Most of them do not.
     return false;
   }
+
+  virtual const char* name() = 0;
+  virtual bool is_diagnostic() = 0;
+  virtual bool is_experimental() = 0;
 };
 
 ShenandoahHeuristics::ShenandoahHeuristics() :
@@ -219,7 +225,8 @@ ShenandoahHeuristics::ShenandoahHeuristics() :
   _region_garbage(NULL),
   _region_garbage_size(0),
   _update_refs_early(false),
-  _update_refs_adaptive(false)
+  _update_refs_adaptive(false),
+  _last_cycle_end(0)
 {
   if (strcmp(ShenandoahUpdateRefsEarly, "on") == 0 ||
       strcmp(ShenandoahUpdateRefsEarly, "true") == 0 ) {
@@ -267,8 +274,24 @@ void ShenandoahHeuristics::choose_collection_set(ShenandoahCollectionSet* collec
   for (size_t i = 0; i < active; i++) {
     ShenandoahHeapRegion* region = regions->get(i);
 
-    if (! region->is_humongous() && ! region->is_pinned()) {
-      if ((! region->is_empty()) && ! region->has_live()) {
+    // Reclaim humongous regions here, and count them as the immediate garbage
+    if (region->is_humongous_start()) {
+#ifdef ASSERT
+      bool reg_live = region->has_live();
+      bool bm_live = heap->is_marked_complete(oop(region->bottom() + BrooksPointer::word_size()));
+      assert(reg_live == bm_live,
+             err_msg("Humongous liveness and marks should agree. Region live: %s; Bitmap live: %s; Region Live Words: " SIZE_FORMAT,
+                     BOOL_TO_STR(reg_live), BOOL_TO_STR(bm_live), region->get_live_data_words()));
+#endif
+      if (!region->has_live()) {
+        size_t reclaimed = heap->reclaim_humongous_region_at(region);
+        immediate_regions += reclaimed;
+        immediate_garbage += reclaimed * ShenandoahHeapRegion::region_size_bytes();
+      }
+    }
+
+    if (region->is_regular()) {
+      if (!region->has_live()) {
         // We can recycle it right away and put it in the free set.
         immediate_regions++;
         immediate_garbage += region->garbage();
@@ -284,7 +307,6 @@ void ShenandoahHeuristics::choose_collection_set(ShenandoahCollectionSet* collec
         cand_idx++;
       }
     } else {
-      assert(region->has_live() || region->is_empty() || region->is_pinned() || region->is_humongous(), "check rejected");
       log_develop_trace(gc)("Rejected region " SIZE_FORMAT " with garbage = " SIZE_FORMAT
                             " and live = " SIZE_FORMAT "\n",
                             region->region_number(), region->garbage(), region->get_live_data_bytes());
@@ -313,30 +335,37 @@ void ShenandoahHeuristics::choose_collection_set(ShenandoahCollectionSet* collec
 
   end_choose_collection_set();
 
+  // Step 3. Look back at collection set, and see if it's worth it to collect,
+  // given the amount of immediately reclaimable garbage.
+
   log_info(gc, ergo)("Total Garbage: "SIZE_FORMAT"M",
                      total_garbage / M);
-  log_info(gc, ergo)("Immediate Garbage: "SIZE_FORMAT"M, "SIZE_FORMAT" regions",
-                     immediate_garbage / M, immediate_regions);
-  log_info(gc, ergo)("Garbage to be collected: "SIZE_FORMAT"M ("SIZE_FORMAT"%% of total), "SIZE_FORMAT" regions",
-                     collection_set->garbage() / M, collection_set->garbage() * 100 / MAX2(total_garbage, (size_t)1), collection_set->count());
-  log_info(gc, ergo)("Live objects to be evacuated: "SIZE_FORMAT"M",
-                     collection_set->live_data() / M);
-  log_info(gc, ergo)("Live/garbage ratio in collected regions: "SIZE_FORMAT"%%",
-                     collection_set->live_data() * 100 / MAX2(collection_set->garbage(), (size_t)1));
+
+  size_t total_garbage_regions = immediate_regions + collection_set->count();
+  size_t immediate_percent = total_garbage_regions == 0 ? 0 : (immediate_regions * 100 / total_garbage_regions);
+
+  log_info(gc, ergo)("Immediate Garbage: "SIZE_FORMAT"M, "SIZE_FORMAT" regions ("SIZE_FORMAT"%% of total)",
+                     immediate_garbage / M, immediate_regions, immediate_percent);
+
+  if (immediate_percent > ShenandoahImmediateThreshold) {
+    collection_set->clear();
+  } else {
+    log_info(gc, ergo)("Garbage to be collected: "SIZE_FORMAT"M ("SIZE_FORMAT"%% of total), "SIZE_FORMAT" regions",
+                       collection_set->garbage() / M, collection_set->garbage() * 100 / MAX2(total_garbage, (size_t)1), collection_set->count());
+    log_info(gc, ergo)("Live objects to be evacuated: "SIZE_FORMAT"M",
+                       collection_set->live_data() / M);
+    log_info(gc, ergo)("Live/garbage ratio in collected regions: "SIZE_FORMAT"%%",
+                       collection_set->live_data() * 100 / MAX2(collection_set->garbage(), (size_t)1));
+  }
+
+  collection_set->update_region_status();
 }
 
 void ShenandoahHeuristics::choose_free_set(ShenandoahFreeSet* free_set) {
-
   ShenandoahHeapRegionSet* ordered_regions = ShenandoahHeap::heap()->regions();
-  size_t i = 0;
-  size_t end = ordered_regions->active_regions();
-
-  ShenandoahHeap* heap = ShenandoahHeap::heap();
-  while (i < end) {
-    ShenandoahHeapRegion* region = ordered_regions->get(i++);
-    if ((! heap->in_collection_set(region))
-        && (! region->is_humongous())
-        && (! region->is_pinned())) {
+  for (size_t i = 0; i < ordered_regions->active_regions(); i++) {
+    ShenandoahHeapRegion* region = ordered_regions->get(i);
+    if (region->is_alloc_allowed()) {
       free_set->add_region(region);
     }
   }
@@ -390,6 +419,12 @@ void ShenandoahCollectorPolicy::record_phase_time(TimingPhase phase, jint time_u
   }
 }
 
+void ShenandoahCollectorPolicy::record_alloc_latency(size_t words_size,
+                                                     ShenandoahHeap::AllocType _alloc_type, double latency_us) {
+  _alloc_size[_alloc_type].add(words_size);
+  _alloc_latency[_alloc_type].add((size_t)latency_us);
+}
+
 void ShenandoahCollectorPolicy::record_gc_start() {
   _heuristics->record_gc_start();
 }
@@ -421,9 +456,11 @@ void ShenandoahHeuristics::record_bytes_end_CM(size_t bytes) {
                                                                    : bytes;
 }
 
-class PassiveHeuristics : public ShenandoahHeuristics {
+class ShenandoahPassiveHeuristics : public ShenandoahHeuristics {
 public:
-  PassiveHeuristics() : ShenandoahHeuristics() {
+  ShenandoahPassiveHeuristics() : ShenandoahHeuristics() {
+    // Do not allow concurrent cycles.
+    FLAG_SET_DEFAULT(ExplicitGCInvokesConcurrent, false);
   }
 
   virtual bool region_in_collection_set(ShenandoahHeapRegion* r, size_t immediate_garbage) {
@@ -446,11 +483,27 @@ public:
     // Always unload classes.
     return true;
   }
+
+  virtual const char* name() {
+    return "passive";
+  }
+
+  virtual bool is_diagnostic() {
+    return true;
+  }
+
+  virtual bool is_experimental() {
+    return false;
+  }
 };
 
-class AggressiveHeuristics : public ShenandoahHeuristics {
+class ShenandoahAggressiveHeuristics : public ShenandoahHeuristics {
 public:
-  AggressiveHeuristics() : ShenandoahHeuristics() {
+  ShenandoahAggressiveHeuristics() : ShenandoahHeuristics() {
+    // Do not shortcut evacuation
+    if (FLAG_IS_DEFAULT(ShenandoahImmediateThreshold)) {
+      FLAG_SET_DEFAULT(ShenandoahImmediateThreshold, 100);
+    }
   }
 
   virtual bool region_in_collection_set(ShenandoahHeapRegion* r, size_t immediate_garbage) {
@@ -472,11 +525,23 @@ public:
     // Randomly unload classes with 50% chance.
     return (os::random() & 1) == 1;
   }
+
+  virtual const char* name() {
+    return "aggressive";
+  }
+
+  virtual bool is_diagnostic() {
+    return true;
+  }
+
+  virtual bool is_experimental() {
+    return false;
+  }
 };
 
-class DynamicHeuristics : public ShenandoahHeuristics {
+class ShenandoahDynamicHeuristics : public ShenandoahHeuristics {
 public:
-  DynamicHeuristics() : ShenandoahHeuristics() {
+  ShenandoahDynamicHeuristics() : ShenandoahHeuristics() {
   }
 
   void print_thresholds() {
@@ -486,7 +551,7 @@ public:
                        ShenandoahGarbageThreshold);
   }
 
-  virtual ~DynamicHeuristics() {}
+  virtual ~ShenandoahDynamicHeuristics() {}
 
   virtual bool should_start_concurrent_mark(size_t used, size_t capacity) const {
 
@@ -507,12 +572,18 @@ public:
     uintx threshold = ShenandoahFreeThreshold + ShenandoahCSetThreshold;
     size_t targetStartMarking = (capacity * threshold) / 100;
 
+    double last_time_ms = (os::elapsedTime() - _last_cycle_end) * 1000;
+    bool periodic_gc = (last_time_ms > ShenandoahGuaranteedGCInterval);
+
     size_t threshold_bytes_allocated = heap->capacity() * ShenandoahAllocationThreshold / 100;
     if (available < targetStartMarking &&
-        heap->bytes_allocated_since_cm() > threshold_bytes_allocated)
-    {
+        heap->bytes_allocated_since_cm() > threshold_bytes_allocated) {
       // Need to check that an appropriate number of regions have
       // been allocated since last concurrent mark too.
+      shouldStartConcurrentMark = true;
+    } else if (periodic_gc) {
+      log_info(gc,ergo)("Periodic GC triggered. Time since last GC: %.0f ms, Guaranteed Interval: " UINTX_FORMAT " ms",
+                        last_time_ms, ShenandoahGuaranteedGCInterval);
       shouldStartConcurrentMark = true;
     }
 
@@ -524,26 +595,59 @@ public:
     return r->garbage() > threshold;
   }
 
+  virtual const char* name() {
+    return "dynamic";
+  }
+
+  virtual bool is_diagnostic() {
+    return false;
+  }
+
+  virtual bool is_experimental() {
+    return false;
+  }
 };
 
+class ShenandoahContinuousHeuristics : public ShenandoahHeuristics {
+public:
+  virtual bool should_start_concurrent_mark(size_t used, size_t capacity) const {
+    // Start the cycle, unless completely idle.
+    return ShenandoahHeap::heap()->bytes_allocated_since_cm() > 0;
+  }
 
-class AdaptiveHeuristics : public ShenandoahHeuristics {
+  virtual bool region_in_collection_set(ShenandoahHeapRegion* r, size_t immediate_garbage) {
+    size_t threshold = ShenandoahHeapRegion::region_size_bytes() * ShenandoahGarbageThreshold / 100;
+    return r->garbage() > threshold;
+  }
+
+  virtual const char* name() {
+    return "continuous";
+  }
+
+  virtual bool is_diagnostic() {
+    return false;
+  }
+
+  virtual bool is_experimental() {
+    return false;
+  }
+};
+
+class ShenandoahAdaptiveHeuristics : public ShenandoahHeuristics {
 private:
   uintx _free_threshold;
   TruncatedSeq* _cset_history;
   size_t _peak_occupancy;
-  double _last_cycle_end;
   TruncatedSeq* _cycle_gap_history;
   double _conc_mark_start;
   TruncatedSeq* _conc_mark_duration_history;
   double _conc_uprefs_start;
   TruncatedSeq* _conc_uprefs_duration_history;
 public:
-  AdaptiveHeuristics() :
+  ShenandoahAdaptiveHeuristics() :
     ShenandoahHeuristics(),
     _free_threshold(ShenandoahInitFreeThreshold),
     _peak_occupancy(0),
-    _last_cycle_end(0),
     _conc_mark_start(0),
     _conc_mark_duration_history(new TruncatedSeq(5)),
     _conc_uprefs_start(0),
@@ -555,7 +659,7 @@ public:
     _cset_history->add((double) ShenandoahCSetThreshold);
   }
 
-  virtual ~AdaptiveHeuristics() {
+  virtual ~ShenandoahAdaptiveHeuristics() {
     delete _cset_history;
   }
 
@@ -605,7 +709,6 @@ public:
   void record_cycle_end() {
     ShenandoahHeuristics::record_cycle_end();
     handle_cycle_success();
-    _last_cycle_end = os::elapsedTime();
   }
 
   void record_cycle_start() {
@@ -632,7 +735,8 @@ public:
   }
 
   void adjust_free_threshold(intx adj) {
-    uintx new_threshold = _free_threshold + adj;
+    intx new_value = adj + _free_threshold;
+    uintx new_threshold = (uintx)MAX2<intx>(new_value, 0);
     new_threshold = MAX2(new_threshold, ShenandoahMinFreeThreshold);
     new_threshold = MIN2(new_threshold, ShenandoahMaxFreeThreshold);
     if (new_threshold != _free_threshold) {
@@ -692,6 +796,8 @@ public:
       factor += cset_threshold;
     }
 
+    double last_time_ms = (os::elapsedTime() - _last_cycle_end) * 1000;
+    bool periodic_gc = (last_time_ms > ShenandoahGuaranteedGCInterval);
     size_t threshold_available = (capacity * factor) / 100;
     size_t bytes_allocated = heap->bytes_allocated_since_cm();
     size_t threshold_bytes_allocated = heap->capacity() * ShenandoahAllocationThreshold / 100;
@@ -703,6 +809,10 @@ public:
                         available / M, threshold_available / M, available / M, threshold_bytes_allocated / M);
       // Need to check that an appropriate number of regions have
       // been allocated since last concurrent mark too.
+      shouldStartConcurrentMark = true;
+    } else if (periodic_gc) {
+      log_info(gc,ergo)("Periodic GC triggered. Time since last GC: %.0f ms, Guaranteed Interval: " UINTX_FORMAT " ms",
+          last_time_ms, ShenandoahGuaranteedGCInterval);
       shouldStartConcurrentMark = true;
     }
 
@@ -737,6 +847,18 @@ public:
       }
     }
     return _update_refs_early;
+  }
+
+  virtual const char* name() {
+    return "adaptive";
+  }
+
+  virtual bool is_diagnostic() {
+    return false;
+  }
+
+  virtual bool is_experimental() {
+    return false;
   }
 };
 
@@ -861,10 +983,13 @@ ShenandoahCollectorPolicy::ShenandoahCollectorPolicy() :
   _phase_names[full_gc_copy_objects]            = "  Copy Objects";
   _phase_names[full_gc_resize_tlabs]            = "  Resize TLABs";
 
+  _phase_names[pause_other]                     = "Pause Other";
+
   _phase_names[conc_mark]                       = "Concurrent Marking";
   _phase_names[conc_preclean]                   = "Concurrent Precleaning";
   _phase_names[conc_evac]                       = "Concurrent Evacuation";
   _phase_names[conc_reset_bitmaps]              = "Concurrent Reset Bitmaps";
+  _phase_names[conc_other]                      = "Concurrent Other";
 
   _phase_names[init_update_refs_gross]          = "Pause Init  Update Refs (G)";
   _phase_names[init_update_refs]                = "Pause Init  Update Refs (N)";
@@ -888,22 +1013,34 @@ ShenandoahCollectorPolicy::ShenandoahCollectorPolicy() :
   _phase_names[final_update_refs_jvmti_roots]          = "    UR: JVMTI Roots";
   _phase_names[final_update_refs_recycle]              = "  Recycle";
 
+
   if (ShenandoahGCHeuristics != NULL) {
     if (strcmp(ShenandoahGCHeuristics, "aggressive") == 0) {
-      log_info(gc, init)("Shenandoah heuristics: aggressive");
-      _heuristics = new AggressiveHeuristics();
+      _heuristics = new ShenandoahAggressiveHeuristics();
     } else if (strcmp(ShenandoahGCHeuristics, "dynamic") == 0) {
-      log_info(gc, init)("Shenandoah heuristics: dynamic");
-      _heuristics = new DynamicHeuristics();
+      _heuristics = new ShenandoahDynamicHeuristics();
     } else if (strcmp(ShenandoahGCHeuristics, "adaptive") == 0) {
-      log_info(gc, init)("Shenandoah heuristics: adaptive");
-      _heuristics = new AdaptiveHeuristics();
+      _heuristics = new ShenandoahAdaptiveHeuristics();
     } else if (strcmp(ShenandoahGCHeuristics, "passive") == 0) {
-      log_info(gc, init)("Shenandoah heuristics: passive");
-      _heuristics = new PassiveHeuristics();
+      _heuristics = new ShenandoahPassiveHeuristics();
+    } else if (strcmp(ShenandoahGCHeuristics, "continuous") == 0) {
+      _heuristics = new ShenandoahContinuousHeuristics();
     } else {
       vm_exit_during_initialization("Unknown -XX:ShenandoahGCHeuristics option");
     }
+
+    if (_heuristics->is_diagnostic() && !UnlockDiagnosticVMOptions) {
+      vm_exit_during_initialization(
+              err_msg("Heuristics \"%s\" is diagnostic, and must be enabled via -XX:+UnlockDiagnosticVMOptions.",
+                      _heuristics->name()));
+    }
+    if (_heuristics->is_experimental() && !UnlockExperimentalVMOptions) {
+      vm_exit_during_initialization(
+              err_msg("Heuristics \"%s\" is experimental, and must be enabled via -XX:+UnlockExperimentalVMOptions.",
+                      _heuristics->name()));
+    }
+    log_info(gc, init)("Shenandoah heuristics: %s",
+                       _heuristics->name());
     _heuristics->print_thresholds();
   } else {
       ShouldNotReachHere();
@@ -1057,6 +1194,61 @@ void ShenandoahCollectorPolicy::print_tracing_info(outputStream* out) {
   out->print_cr("" SIZE_FORMAT " successful and " SIZE_FORMAT " degenerated concurrent markings", _successful_cm, _degenerated_cm);
   out->print_cr("" SIZE_FORMAT " successful and " SIZE_FORMAT " degenerated update references  ", _successful_uprefs, _degenerated_uprefs);
   out->cr();
+
+  out->print_cr("ALLOCATION TRACING");
+  out->print_cr("  These are the slow-path allocations, including TLAB/GCLAB refills, and out-of-TLAB allocations.");
+  out->print_cr("  In-TLAB/GCLAB allocations happen orders of magnitude more frequently, and without delays.");
+  out->cr();
+
+  if (ShenandoahAllocationTrace) {
+    out->print("%18s", "");
+    for (size_t t = 0; t < ShenandoahHeap::_ALLOC_LIMIT; t++) {
+      out->print("%12s", ShenandoahHeap::alloc_type_to_string(ShenandoahHeap::AllocType(t)));
+    }
+    out->cr();
+
+    out->print_cr("Counts:");
+    out->print("%18s", "#");
+    for (size_t t = 0; t < ShenandoahHeap::_ALLOC_LIMIT; t++) {
+      out->print(SIZE_FORMAT_W(12), _alloc_size[t].num());
+    }
+    out->cr();
+    out->cr();
+
+    // Figure out max and min levels
+    int lat_min_level = +1000;
+    int lat_max_level = -1000;
+    int size_min_level = +1000;
+    int size_max_level = -1000;
+    for (size_t t = 0; t < ShenandoahHeap::_ALLOC_LIMIT; t++) {
+      lat_min_level = MIN2(lat_min_level, _alloc_latency[t].min_level());
+      lat_max_level = MAX2(lat_max_level, _alloc_latency[t].max_level());
+      size_min_level = MIN2(size_min_level, _alloc_size[t].min_level());
+      size_max_level = MAX2(size_max_level, _alloc_size[t].max_level());
+    }
+
+    out->print_cr("Latencies (in microseconds):");
+    for (int c = lat_min_level; c <= lat_max_level; c++) {
+      out->print("%7d - %7d:", (c == 0) ? 0 : 1 << (c - 1), 1 << c);
+      for (size_t t = 0; t < ShenandoahHeap::_ALLOC_LIMIT; t++) {
+        out->print(SIZE_FORMAT_W(12), _alloc_latency[t].level(c));
+      }
+      out->cr();
+    }
+    out->cr();
+
+    out->print_cr("Sizes (in bytes):");
+    for (int c = size_min_level; c <= size_max_level; c++) {
+      out->print("%7d - %7d:", (c == 0) ? 0 : 1 << (c - 1), 1 << c);
+      for (size_t t = 0; t < ShenandoahHeap::_ALLOC_LIMIT; t++) {
+        out->print(SIZE_FORMAT_W(12), _alloc_size[t].level(c));
+      }
+      out->cr();
+    }
+    out->cr();
+  } else {
+    out->print_cr("  Allocation tracing is disabled, use -XX:+ShenandoahAllocationTrace to enable.");
+  }
 }
 
 void ShenandoahCollectorPolicy::print_summary_sd(outputStream* out, const char* str, const HdrSeq* seq)  {

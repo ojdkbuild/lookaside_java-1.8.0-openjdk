@@ -779,15 +779,12 @@ class StubGenerator: public StubCodeGenerator {
     if (!c_abi) {
       __ mov(rdi, rax);
     } else {
-#ifdef _WINDOWS
-       // Windows VSC calling convention: RCX - first argument
-       __ mov(rax, rcx);
-#else
-      __ mov(rax, rdi);
-#endif // _WINDOWS
+      if (rax != c_rarg0) {
+        __ mov(rax, c_rarg0);
+      }
     }
     if (do_cset_test) {
-      __ shrptr(rdi, ShenandoahHeapRegion::region_size_shift_jint());
+      __ shrptr(rdi, ShenandoahHeapRegion::region_size_bytes_shift_jint());
       // live: r8
       __ movptr(r8, (intptr_t) ShenandoahHeap::in_cset_fast_test_addr());
       __ movbool(r8, Address(r8, rdi, Address::times_1));

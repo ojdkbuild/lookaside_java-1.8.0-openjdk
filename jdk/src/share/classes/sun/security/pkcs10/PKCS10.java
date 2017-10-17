@@ -177,7 +177,8 @@ public class PKCS10 {
         // key and signature algorithm we found.
         //
         try {
-            sig = Signature.getInstance(id.getName());
+            sigAlg = id.getName();
+            sig = Signature.getInstance(sigAlg);
             sig.initVerify(subjectPublicKeyInfo);
             sig.update(data);
             if (!sig.verify(sigData))
@@ -228,6 +229,7 @@ public class PKCS10 {
         signature.update(certificateRequestInfo, 0,
                 certificateRequestInfo.length);
         sig = signature.sign();
+        sigAlg = signature.getAlgorithm();
 
         /*
          * Build guts of SIGNED macro
@@ -259,6 +261,11 @@ public class PKCS10 {
      */
     public PublicKey getSubjectPublicKeyInfo()
         { return subjectPublicKeyInfo; }
+
+    /**
+     * Returns the signature algorithm.
+     */
+    public String getSigAlg() { return sigAlg; }
 
     /**
      * Returns the additional attributes requested.
@@ -384,6 +391,7 @@ public class PKCS10 {
 
     private X500Name            subject;
     private PublicKey           subjectPublicKeyInfo;
+    private String              sigAlg;
     private PKCS10Attributes    attributeSet;
     private byte[]              encoded;        // signed
 }

@@ -21,9 +21,10 @@
  *
  */
 
-#ifndef SHARE_VM_GC_SHENANDOAH_SHENANDOAH_COLLECTOR_POLICY_HPP
-#define SHARE_VM_GC_SHENANDOAH_SHENANDOAH_COLLECTOR_POLICY_HPP
+#ifndef SHARE_VM_GC_SHENANDOAH_SHENANDOAHCOLLECTORPOLICY_HPP
+#define SHARE_VM_GC_SHENANDOAH_SHENANDOAHCOLLECTORPOLICY_HPP
 
+#include "gc_implementation/shenandoah/shenandoahHeap.hpp"
 #include "memory/collectorPolicy.hpp"
 #include "runtime/arguments.hpp"
 #include "utilities/numberSeq.hpp"
@@ -184,6 +185,10 @@ public:
     conc_update_refs,
     conc_reset_bitmaps,
 
+    // Unclassified
+    pause_other,
+    conc_other,
+
     _num_phases
   };
 
@@ -191,12 +196,13 @@ private:
   struct TimingData {
     HdrSeq _secs;
     double _start;
-    size_t _count;
   };
 
 private:
   TimingData _timing_data[_num_phases];
   const char* _phase_names[_num_phases];
+  BinaryMagnitudeSeq _alloc_size[ShenandoahHeap::_ALLOC_LIMIT];
+  BinaryMagnitudeSeq _alloc_latency[ShenandoahHeap::_ALLOC_LIMIT];
 
   size_t _user_requested_gcs;
   size_t _allocation_failure_gcs;
@@ -248,6 +254,8 @@ public:
 
   void record_workers_start(TimingPhase phase);
   void record_workers_end(TimingPhase phase);
+
+  void record_alloc_latency(size_t words_size, ShenandoahHeap::AllocType alloc_type, double latency_us);
 
   void report_concgc_cancelled();
 
@@ -333,4 +341,4 @@ private:
 };
 
 
-#endif // SHARE_VM_GC_SHENANDOAH_SHENANDOAH_COLLECTOR_POLICY_HPP
+#endif // SHARE_VM_GC_SHENANDOAH_SHENANDOAHCOLLECTORPOLICY_HPP

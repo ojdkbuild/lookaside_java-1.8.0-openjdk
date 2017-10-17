@@ -55,6 +55,11 @@
   experimental(uintx, ShenandoahMaxRegionSize, 32 * M,                      \
           "Maximum heap region size. ")                                     \
                                                                             \
+  experimental(intx, ShenandoahHumongousThreshold, 100,                     \
+          "How large should the object be to get allocated in humongous "   \
+          "region, in percents of heap region size. This also caps the "    \
+          "maximum TLAB size.")                                             \
+                                                                            \
   experimental(size_t, ShenandoahTargetNumRegions, 2048,                    \
           "Target number of regions. We try to get around that many "       \
           "regions, based on ShenandoahMinRegionSize and "                  \
@@ -150,9 +155,22 @@
   experimental(uintx, ShenandoahMaxFreeThreshold, 70,                       \
                "Maximum remaining free threshold for adaptive heuristics")  \
                                                                             \
+  experimental(uintx, ShenandoahImmediateThreshold, 90,                     \
+               "If mark identifies more than this much immediate garbage "  \
+               "regions, it shall recycle them, and shall not continue the "\
+               "rest of the GC cycle. The value is in percents of total "   \
+               "number of candidates for collection set. Setting this "     \
+               "threshold to 100% effectively disables this shortcut.")     \
+                                                                            \
+  experimental(uintx, ShenandoahGuaranteedGCInterval, 5*60*1000,            \
+               "Adaptive and dynamic heuristics would guarantee a GC cycle "\
+               "at least with this interval. This is useful when large idle"\
+               " intervals are present, where GC can run without stealing " \
+               "time from active application. Time is in milliseconds.")    \
+                                                                            \
   experimental(uintx, ShenandoahHappyCyclesThreshold, 3,                    \
           "How many successful marking cycles before improving free "       \
-               "threshold for adaptive heuristics")                    \
+               "threshold for adaptive heuristics")                         \
                                                                             \
   experimental(uintx, ShenandoahMarkLoopStride, 1000,                       \
           "How many items are processed during one marking step")           \
@@ -169,6 +187,14 @@
           " 0 - sequential iterator;"                                       \
           " 1 - parallel iterator;"                                         \
           " 2 - parallel iterator with filters;")                           \
+                                                                            \
+  experimental(uintx, ShenandoahUncommitDelay, 5*60*1000,                   \
+           "Shenandoah would start to uncommit memory for regions that were"\
+           " not used for more than this time. First use after that would " \
+           "incur allocation stalls. Actively used regions would never be " \
+           "uncommitted, because they never decay. Time is in milliseconds."\
+           "Setting this delay to 0 effectively makes Shenandoah to "       \
+           "uncommit the regions almost immediately.")                      \
                                                                             \
   experimental(bool, ShenandoahBarriersForConst, false,                     \
           "Emit barriers for constant oops in generated code, improving "   \
@@ -223,11 +249,25 @@
           "3 = previous level, plus all reachable objects; "                \
           "4 = previous level, plus all marked objects")                    \
                                                                             \
+  diagnostic(bool, ShenandoahAllocationTrace, false,                        \
+          "Trace allocation latencies and stalls. Can be expensive when "   \
+          "lots of allocations happen, and may introduce scalability "      \
+          "bottlenecks.")                                                   \
+                                                                            \
+  diagnostic(intx, ShenandoahAllocationStallThreshold, 10000,               \
+          "When allocation tracing is enabled, the allocation stalls "      \
+          "larger than this threshold would be reported as warnings. "      \
+          "Time is in microseconds.")                                       \
+                                                                            \
   develop(bool, VerifyStrictOopOperations, false,                           \
           "Verify that == and != are not used on oops. Only in fastdebug")  \
                                                                             \
   develop(bool, ShenandoahVerifyOptoBarriers, false,                        \
           "Verify no missing barriers in c2")                               \
+                                                                            \
+  develop(intx, ShenandoahFailHeapExpansionAfter, -1,                       \
+          "Artificially fails heap expansion after specified times."        \
+          "Used to verify allocation handling. Default -1 to disable it.")  \
                                                                             \
   product(bool, ShenandoahAlwaysPreTouch, false,                            \
           "Pre-touch heap memory, overrides global AlwaysPreTouch")         \
