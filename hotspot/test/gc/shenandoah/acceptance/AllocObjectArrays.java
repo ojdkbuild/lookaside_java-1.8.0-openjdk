@@ -25,34 +25,38 @@
  * @test AllocObjectArrays
  * @summary Acceptance tests: collector can withstand allocation
  *
- * @run main/othervm -XX:+UseShenandoahGC -Xmx2g -Xms2g                                       AllocObjectArrays
- * @run main/othervm -XX:+UseShenandoahGC -Xmx2g -Xms2g -XX:ShenandoahGCHeuristics=passive    AllocObjectArrays
- * @run main/othervm -XX:+UseShenandoahGC -Xmx2g -Xms2g -XX:ShenandoahGCHeuristics=adaptive   AllocObjectArrays
- * @run main/othervm -XX:+UseShenandoahGC -Xmx2g -Xms2g -XX:ShenandoahGCHeuristics=dynamic    AllocObjectArrays
- * @run main/othervm -XX:+UseShenandoahGC -Xmx2g -Xms2g -XX:ShenandoahGCHeuristics=aggressive AllocObjectArrays
+ * @run main/othervm -XX:+UseShenandoahGC -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -Xmx2g -Xms2g                                       AllocObjectArrays
+ * @run main/othervm -XX:+UseShenandoahGC -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -Xmx2g -Xms2g -XX:ShenandoahGCHeuristics=passive    AllocObjectArrays
+ * @run main/othervm -XX:+UseShenandoahGC -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -Xmx2g -Xms2g -XX:ShenandoahGCHeuristics=adaptive   AllocObjectArrays
+ * @run main/othervm -XX:+UseShenandoahGC -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -Xmx2g -Xms2g -XX:ShenandoahGCHeuristics=dynamic    AllocObjectArrays
+ * @run main/othervm -XX:+UseShenandoahGC -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -Xmx2g -Xms2g -XX:ShenandoahGCHeuristics=continuous AllocObjectArrays
+ * @run main/othervm -XX:+UseShenandoahGC -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -Xmx2g -Xms2g -XX:ShenandoahGCHeuristics=aggressive AllocObjectArrays
  *
- * @run main/othervm -XX:+UseShenandoahGC -Xmx2g -Xms2g                                       -XX:+UnlockDiagnosticVMOptions -XX:+ShenandoahVerify AllocObjectArrays
- * @run main/othervm -XX:+UseShenandoahGC -Xmx2g -Xms2g -XX:ShenandoahGCHeuristics=passive    -XX:+UnlockDiagnosticVMOptions -XX:+ShenandoahVerify AllocObjectArrays
- * @run main/othervm -XX:+UseShenandoahGC -Xmx2g -Xms2g -XX:ShenandoahGCHeuristics=adaptive   -XX:+UnlockDiagnosticVMOptions -XX:+ShenandoahVerify AllocObjectArrays
- * @run main/othervm -XX:+UseShenandoahGC -Xmx2g -Xms2g -XX:ShenandoahGCHeuristics=dynamic    -XX:+UnlockDiagnosticVMOptions -XX:+ShenandoahVerify AllocObjectArrays
+ * @run main/othervm -XX:+UseShenandoahGC -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -Xmx2g -Xms2g                                       -XX:+ShenandoahVerify AllocObjectArrays
+ * @run main/othervm -XX:+UseShenandoahGC -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -Xmx2g -Xms2g -XX:ShenandoahGCHeuristics=passive    -XX:+ShenandoahVerify AllocObjectArrays
+ * @run main/othervm -XX:+UseShenandoahGC -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -Xmx2g -Xms2g -XX:ShenandoahGCHeuristics=adaptive   -XX:+ShenandoahVerify AllocObjectArrays
+ * @run main/othervm -XX:+UseShenandoahGC -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -Xmx2g -Xms2g -XX:ShenandoahGCHeuristics=dynamic    -XX:+ShenandoahVerify AllocObjectArrays
+ *
+ * @run main/othervm -XX:+UseShenandoahGC -XX:+UnlockDiagnosticVMOptions -XX:+UnlockExperimentalVMOptions -Xmx2g -Xms2g -XX:-UseTLAB                          -XX:+ShenandoahVerify AllocObjectArrays
  */
+
+import java.util.Random;
 
 public class AllocObjectArrays {
 
-  static final long TARGET_MB = Long.getLong("target", 20_000); // 20 Gb allocation
+  static final long TARGET_MB = Long.getLong("target", 10_000); // 10 Gb allocation
 
   static volatile Object sink;
 
   public static void main(String[] args) throws Exception {
-     final int min = 10;
-     final int max = 10_000_000;
-     for (int s = min; s <= max; s *= 10) {
-         System.out.println("Object[" + s + "]");
-         long count = TARGET_MB * 1024 * 1024 / (16 + 8*s);
-         for (long c = 0; c < count; c++) {
-             sink = new Object[s];
-         }
-     }
+    final int min = 0;
+    final int max = 384*1024;
+    long count = TARGET_MB * 1024 * 1024 / (16 + 4*(min + (max-min)/2));
+
+    Random r = new Random();
+    for (long c = 0; c < count; c++) {
+      sink = new Object[min + r.nextInt(max-min)];
+    }
   }
 
 }

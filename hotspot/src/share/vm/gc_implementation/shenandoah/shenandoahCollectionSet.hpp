@@ -26,7 +26,6 @@
 #define SHARE_VM_GC_SHENANDOAH_SHENANDOAHCOLLECTIONSET_HPP
 
 #include "memory/allocation.hpp"
-#include "utilities/ostream.hpp"
 
 class ShenandoahHeap;
 class ShenandoahHeapRegion;
@@ -51,6 +50,11 @@ public:
   // Add region to collection set
   void add_region(ShenandoahHeapRegion* r);
 
+  // Bring per-region statuses to consistency with this collection.
+  // TODO: This is a transitional interface that bridges the gap between
+  // region statuses and this collection. Should go away after we merge them.
+  void update_region_status();
+
   // Remove region from collection set
   void remove_region(ShenandoahHeapRegion* r);
 
@@ -60,7 +64,8 @@ public:
   // Single-thread version
   ShenandoahHeapRegion* next();
 
-  size_t count() const { return _region_count; }
+  size_t count()  const { return _region_count; }
+  bool is_empty() const { return _region_count == 0; }
 
   void clear_current_index() {
     _current_index = 0;
@@ -70,7 +75,7 @@ public:
   inline bool is_in(size_t region_number)    const;
   inline bool is_in(HeapWord* p)             const;
 
-  void print(outputStream* out = tty) const;
+  void print_on(outputStream* out) const;
 
   size_t live_data() const { return _live_data; }
   size_t garbage()   const { return _garbage;   }

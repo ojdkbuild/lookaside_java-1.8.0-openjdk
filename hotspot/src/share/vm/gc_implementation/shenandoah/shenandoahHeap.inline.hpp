@@ -33,6 +33,7 @@
 #include "gc_implementation/shenandoah/shenandoahHeap.hpp"
 #include "gc_implementation/shenandoah/shenandoahHeapRegionSet.hpp"
 #include "gc_implementation/shenandoah/shenandoahHeapRegion.inline.hpp"
+#include "gc_implementation/shenandoah/shenandoahUtils.hpp"
 #include "oops/oop.inline.hpp"
 #include "runtime/atomic.hpp"
 #include "runtime/prefetch.hpp"
@@ -40,7 +41,7 @@
 #include "utilities/copy.hpp"
 
 template <class T>
-void SCMUpdateRefsClosure::do_oop_work(T* p) {
+void ShenandoahUpdateRefsClosure::do_oop_work(T* p) {
   T o = oopDesc::load_heap_oop(p);
   if (! oopDesc::is_null(o)) {
     oop obj = oopDesc::decode_heap_oop_not_null(o);
@@ -48,13 +49,8 @@ void SCMUpdateRefsClosure::do_oop_work(T* p) {
   }
 }
 
-void SCMUpdateRefsClosure::do_oop(oop* p)       { do_oop_work(p); }
-void SCMUpdateRefsClosure::do_oop(narrowOop* p) { do_oop_work(p); }
-
-inline size_t ShenandoahHeap::num_regions() const {
-  assert(regions() != NULL, "Sanity");
-  return regions()->active_regions();
-}
+void ShenandoahUpdateRefsClosure::do_oop(oop* p)       { do_oop_work(p); }
+void ShenandoahUpdateRefsClosure::do_oop(narrowOop* p) { do_oop_work(p); }
 
 /*
  * Marks the object. Returns true if the object has not been marked before and has
@@ -98,7 +94,7 @@ inline bool ShenandoahHeap::need_update_refs() const {
 
 inline size_t ShenandoahHeap::heap_region_index_containing(const void* addr) const {
   uintptr_t region_start = ((uintptr_t) addr);
-  uintptr_t index = (region_start - (uintptr_t) base()) >> ShenandoahHeapRegion::region_size_shift();
+  uintptr_t index = (region_start - (uintptr_t) base()) >> ShenandoahHeapRegion::region_size_bytes_shift();
 #ifdef ASSERT
   if (index >= num_regions()) {
     tty->print_cr("heap region does not contain address, heap base: "PTR_FORMAT \
@@ -175,7 +171,7 @@ inline oop ShenandoahHeap::maybe_update_oop_ref_not_null(T* p, oop heap_oop) {
 
 #ifdef ASSERT
   if (! is_in(heap_oop)) {
-    print_heap_regions();
+    print_heap_regions_on(tty);
     tty->print_cr("object not in heap: "PTR_FORMAT", referenced by: "PTR_FORMAT, p2i((HeapWord*) heap_oop), p2i(p));
     assert(is_in(heap_oop), "object must be in heap");
   }
@@ -367,14 +363,14 @@ inline bool ShenandoahHeap::is_evacuation_in_progress() const {
 }
 
 inline bool ShenandoahHeap::allocated_after_next_mark_start(HeapWord* addr) const {
-  uintx index = ((uintx) addr) >> ShenandoahHeapRegion::region_size_shift();
+  uintx index = ((uintx) addr) >> ShenandoahHeapRegion::region_size_bytes_shift();
   HeapWord* top_at_mark_start = _next_top_at_mark_starts[index];
   bool alloc_after_mark_start = addr >= top_at_mark_start;
   return alloc_after_mark_start;
 }
 
 inline bool ShenandoahHeap::allocated_after_complete_mark_start(HeapWord* addr) const {
-  uintx index = ((uintx) addr) >> ShenandoahHeapRegion::region_size_shift();
+  uintx index = ((uintx) addr) >> ShenandoahHeapRegion::region_size_bytes_shift();
   HeapWord* top_at_mark_start = _complete_top_at_mark_starts[index];
   bool alloc_after_mark_start = addr >= top_at_mark_start;
   return alloc_after_mark_start;

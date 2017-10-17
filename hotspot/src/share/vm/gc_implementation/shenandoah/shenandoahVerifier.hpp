@@ -21,8 +21,8 @@
  *
  */
 
-#ifndef SHARE_VM_GC_SHENANDOAH_SHENANDOAHVERIFY_HPP
-#define SHARE_VM_GC_SHENANDOAH_SHENANDOAHVERIFY_HPP
+#ifndef SHARE_VM_GC_SHENANDOAH_SHENANDOAHVERIFIER_HPP
+#define SHARE_VM_GC_SHENANDOAH_SHENANDOAHVERIFIER_HPP
 
 #include "memory/allocation.hpp"
 #include "gc_implementation/shared/markBitMap.hpp"
@@ -31,20 +31,20 @@
 class Thread;
 class ShenandoahHeapRegionSet;
 class ShenandoahHeap;
-class VerifyReachableHeapClosure;
+class ShenandoahVerifyOopClosure;
 
-class VerifierTask {
+class ShenandoahVerifierTask {
 public:
-  VerifierTask(oop o = NULL, int idx = 0): _obj(o) { }
-  VerifierTask(oop o, size_t idx): _obj(o) { }
-  VerifierTask(const VerifierTask& t): _obj(t._obj) { }
+  ShenandoahVerifierTask(oop o = NULL, int idx = 0): _obj(o) { }
+  ShenandoahVerifierTask(oop o, size_t idx): _obj(o) { }
+  ShenandoahVerifierTask(const ShenandoahVerifierTask& t): _obj(t._obj) { }
 
-  VerifierTask& operator =(const VerifierTask& t) {
+  ShenandoahVerifierTask& operator =(const ShenandoahVerifierTask& t) {
     _obj = t._obj;
     return *this;
   }
-  volatile VerifierTask&
-  operator =(const volatile VerifierTask& t) volatile {
+  volatile ShenandoahVerifierTask&
+  operator =(const volatile ShenandoahVerifierTask& t) volatile {
     (void)const_cast<oop&>(_obj = t._obj);
     return *this;
   }
@@ -57,8 +57,9 @@ private:
   oop _obj;
 };
 
-typedef FormatBuffer<8192> MessageBuffer;
-typedef Stack<VerifierTask, mtGC> ShenandoahVerifierStack;
+typedef FormatBuffer<8192> ShenandoahMessageBuffer;
+typedef Stack<ShenandoahVerifierTask, mtGC> ShenandoahVerifierStack;
+typedef volatile jint ShenandoahLivenessData;
 
 class ShenandoahVerifier : public CHeapObj<mtGC> {
 private:
@@ -115,18 +116,33 @@ public:
     _verify_cset_forwarded,
   } VerifyCollectionSet;
 
+  typedef enum {
+    // Disable liveness verification
+    _verify_liveness_disable,
+
+    // All objects should belong to live regions
+    _verify_liveness_conservative,
+
+    // All objects should belong to live regions,
+    // and liveness data should be accurate
+    _verify_liveness_complete,
+  } VerifyLiveness;
+
   struct VerifyOptions {
     VerifyForwarded     _verify_forwarded;
     VerifyMarked        _verify_marked;
     VerifyMatrix        _verify_matrix;
     VerifyCollectionSet _verify_cset;
+    VerifyLiveness      _verify_liveness;
 
     VerifyOptions(VerifyForwarded verify_forwarded,
                   VerifyMarked verify_marked,
                   VerifyMatrix verify_matrix,
-                  VerifyCollectionSet verify_collection_set) :
+                  VerifyCollectionSet verify_collection_set,
+                  VerifyLiveness verify_liveness) :
             _verify_forwarded(verify_forwarded), _verify_marked(verify_marked),
-            _verify_matrix(verify_matrix), _verify_cset(verify_collection_set) {}
+            _verify_matrix(verify_matrix), _verify_cset(verify_collection_set),
+            _verify_liveness(verify_liveness) {}
   };
 
 private:
@@ -134,7 +150,8 @@ private:
                            VerifyForwarded forwarded,
                            VerifyMarked marked,
                            VerifyMatrix matrix,
-                           VerifyCollectionSet cset);
+                           VerifyCollectionSet cset,
+                           VerifyLiveness liveness);
 
 public:
   ShenandoahVerifier(ShenandoahHeap* heap, MarkBitMap* verification_bitmap) :
@@ -156,4 +173,4 @@ public:
   static void verify_oop_fwdptr(oop obj, oop new_fwd);
 };
 
-#endif // SHARE_VM_GC_SHENANDOAH_SHENANDOAHVERIFY_HPP
+#endif // SHARE_VM_GC_SHENANDOAH_SHENANDOAHVERIFIER_HPP

@@ -33,13 +33,13 @@
 
 ShenandoahCollectionSet::ShenandoahCollectionSet(ShenandoahHeap* heap, HeapWord* heap_base) :
         _garbage(0), _live_data(0), _heap(heap), _region_count(0),
-        _map_size(heap->max_regions()), _current_index(0) {
+        _map_size(heap->num_regions()), _current_index(0) {
   // Use 1-byte data type
   STATIC_ASSERT(sizeof(jbyte) == 1);
 
   _cset_map = NEW_C_HEAP_ARRAY(jbyte, _map_size, mtGC);
   // Bias cset map's base address for fast test if an oop is in cset
-  _biased_cset_map = _cset_map - ((uintx)heap_base >> ShenandoahHeapRegion::region_size_shift());
+  _biased_cset_map = _cset_map - ((uintx)heap_base >> ShenandoahHeapRegion::region_size_bytes_shift());
 
   // Initialize cset map
   Copy::zero_to_bytes(_cset_map, _map_size);
@@ -63,9 +63,26 @@ void ShenandoahCollectionSet::remove_region(ShenandoahHeapRegion* r) {
   _region_count --;
 }
 
+void ShenandoahCollectionSet::update_region_status() {
+  for (size_t index = 0; index < _heap->num_regions(); index ++) {
+    ShenandoahHeapRegion* r = _heap->regions()->get(index);
+    if (is_in(r)) {
+      r->make_cset();
+    } else {
+      assert (!r->is_cset(), "should not be cset");
+    }
+  }
+}
+
 void ShenandoahCollectionSet::clear() {
   assert(SafepointSynchronize::is_at_safepoint(), "Must be at a safepoint");
   Copy::zero_to_bytes(_cset_map, _map_size);
+
+#ifdef ASSERT
+  for (size_t index = 0; index < _heap->num_regions(); index ++) {
+    assert (!_heap->regions()->get(index)->is_cset(), "should have been cleared before");
+  }
+#endif
 
   _garbage = 0;
   _live_data = 0;
@@ -117,7 +134,7 @@ ShenandoahHeapRegion* ShenandoahCollectionSet::next() {
 }
 
 
-void ShenandoahCollectionSet::print(outputStream* out) const {
+void ShenandoahCollectionSet::print_on(outputStream* out) const {
   out->print_cr("Collection Set : " SIZE_FORMAT "", count());
 
   debug_only(size_t regions = 0;)

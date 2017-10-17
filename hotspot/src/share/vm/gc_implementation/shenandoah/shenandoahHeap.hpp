@@ -25,6 +25,7 @@
 #define SHARE_VM_GC_SHENANDOAH_SHENANDOAHHEAP_HPP
 
 #include "gc_implementation/shared/markBitMap.hpp"
+#include "gc_implementation/shenandoah/shenandoahHeapLock.hpp"
 #include "gc_implementation/shenandoah/shenandoahWorkGroup.hpp"
 
 class ConcurrentGCTimer;
@@ -40,7 +41,7 @@ class ShenandoahVerifier;
 class ShenandoahConcurrentThread;
 class ShenandoahMonitoringSupport;
 
-class SCMUpdateRefsClosure: public OopClosure {
+class ShenandoahUpdateRefsClosure: public OopClosure {
 private:
   ShenandoahHeap* _heap;
 
@@ -48,15 +49,13 @@ private:
   inline void do_oop_work(T* p);
 
 public:
-  SCMUpdateRefsClosure();
-
-public:
+  ShenandoahUpdateRefsClosure();
   inline void do_oop(oop* p);
   inline void do_oop(narrowOop* p);
 };
 
 #ifdef ASSERT
-class AssertToSpaceClosure : public OopClosure {
+class ShenandoahAssertToSpaceClosure : public OopClosure {
 private:
   template <class T>
   void do_oop_nv(T* p);
@@ -71,14 +70,14 @@ public:
   bool do_object_b(oop p) { return true; }
 };
 
-
 class ShenandoahForwardedIsAliveClosure: public BoolObjectClosure {
-
 private:
   ShenandoahHeap* _heap;
 public:
   ShenandoahForwardedIsAliveClosure();
-  void init(ShenandoahHeap* heap);
+  void init(ShenandoahHeap* heap) {
+    _heap = heap;
+  }
   bool do_object_b(oop obj);
 };
 
@@ -87,7 +86,9 @@ private:
   ShenandoahHeap* _heap;
 public:
   ShenandoahIsAliveClosure();
-  void init(ShenandoahHeap* heap);
+  void init(ShenandoahHeap* heap) {
+    _heap = heap;
+  }
   bool do_object_b(oop obj);
 };
 
@@ -102,46 +103,14 @@ public:
 // //      ShenandoahHeap
 
 class ShenandoahHeap : public SharedHeap {
-
-  enum LockState { unlocked = 0, locked = 1 };
-
-public:
-  class ShenandoahHeapLock : public StackObj {
-  private:
-    ShenandoahHeap* _heap;
-
-  public:
-    ShenandoahHeapLock(ShenandoahHeap* heap) : _heap(heap) {
-      while (OrderAccess::load_acquire(& _heap->_heap_lock) == locked || Atomic::cmpxchg(locked, &_heap->_heap_lock, unlocked) == locked) {
-        SpinPause();
-      }
-      assert(_heap->_heap_lock == locked, "sanity");
-
-#ifdef ASSERT
-      assert(_heap->_heap_lock_owner == NULL, "must not be owned");
-      _heap->_heap_lock_owner = Thread::current();
-#endif
-    }
-
-    ~ShenandoahHeapLock() {
-#ifdef ASSERT
-      _heap->assert_heaplock_owned_by_current_thread();
-      _heap->_heap_lock_owner = NULL;
-#endif
-      OrderAccess::release_store_fence(&_heap->_heap_lock, unlocked);
-    }
-
-  };
-
 public:
   enum ShenandoahCancelCause {
     _oom_evacuation,
     _vm_stop,
   };
 private:
-
+  ShenandoahHeapLock _lock;
   ShenandoahCollectorPolicy* _shenandoah_policy;
-  VirtualSpace _storage;
   size_t _bitmap_size;
   MemRegion _heap_region;
 
@@ -158,13 +127,14 @@ private:
 
   ShenandoahMonitoringSupport* _monitoring_support;
 
-  size_t _max_regions;
-  size_t _initialSize;
+  size_t _num_regions;
+  size_t _initial_size;
   uint _max_workers;
 
   FlexibleWorkGang* _workers;
 
   volatile size_t _used;
+  volatile size_t _committed;
 
   MarkBitMap _verification_bit_map;
   MarkBitMap _mark_bit_map0;
@@ -206,6 +176,7 @@ private:
 
 #ifdef ASSERT
   Thread* volatile _heap_lock_owner;
+  int     _heap_expansion_count;
 #endif
 
 public:
@@ -224,9 +195,10 @@ public:
   void post_initialize() /* override */;
   size_t capacity() const /* override */;
   size_t used() const /* override */;
+  size_t committed() const;
   bool is_maximal_no_gc() const /* override */;
   size_t max_capacity() const /* override */;
-  size_t min_capacity() const /* override */;
+  size_t initial_capacity() const /* override */;
   bool is_in(const void* p) const /* override */;
   bool is_scavengable(const void* addr) /* override */;
   HeapWord* mem_allocate(size_t size, bool* what) /* override */;
@@ -264,7 +236,7 @@ public:
   bool supports_heap_inspection() const /* override */;
 
   void space_iterate(SpaceClosure* scl) /* override */;
-  void oop_iterate(ExtendedOopClosure* cl, bool skip_dirty_regions,
+  void oop_iterate(ExtendedOopClosure* cl, bool skip_cset_regions,
                    bool skip_unreachable_objects);
   void oop_iterate(ExtendedOopClosure* cl) {
     oop_iterate(cl, false, false);
@@ -298,7 +270,7 @@ public:
   template <class T>
   inline oop maybe_update_oop_ref(T* p);
 
-  void recycle_dirty_regions();
+  void recycle_cset_regions();
 
   void start_concurrent_marking();
   void stop_concurrent_marking();
@@ -373,6 +345,11 @@ public:
 
   void set_used(size_t bytes);
 
+  void increase_committed(size_t bytes);
+  void decrease_committed(size_t bytes);
+
+  void handle_heap_shrinkage();
+
   size_t garbage();
 
   void reset_next_mark_bitmap(WorkGang* gang);
@@ -384,6 +361,7 @@ public:
   inline bool mark_next(oop obj) const;
   inline bool is_marked_next(oop obj) const;
   bool is_next_bitmap_clear();
+  bool is_next_bitmap_clear_range(HeapWord* start, HeapWord* end);
   bool is_complete_bitmap_clear_range(HeapWord* start, HeapWord* end);
 
   template <class T>
@@ -392,14 +370,12 @@ public:
   template <class T>
   inline oop maybe_update_oop_ref_not_null(T* p, oop obj);
 
-  void print_heap_regions(outputStream* st = tty) const;
+  void print_heap_regions_on(outputStream* st) const;
 
   size_t bytes_allocated_since_cm();
   void set_bytes_allocated_since_cm(size_t bytes);
 
-  void reclaim_humongous_region_at(ShenandoahHeapRegion* r);
-
-  VirtualSpace* storage() const;
+  size_t reclaim_humongous_region_at(ShenandoahHeapRegion* r);
 
   ShenandoahMonitoringSupport* monitoring_support();
   ShenandoahConcurrentMark* concurrentMark() { return _scm;}
@@ -414,17 +390,13 @@ public:
   void do_evacuation();
   ShenandoahHeapRegion* next_compaction_region(const ShenandoahHeapRegion* r);
 
-  void heap_region_iterate(ShenandoahHeapRegionClosure* blk, bool skip_dirty_regions = false, bool skip_humongous_continuation = false) const;
+  void heap_region_iterate(ShenandoahHeapRegionClosure* blk, bool skip_cset_regions = false, bool skip_humongous_continuation = false) const;
 
   // Delete entries for dead interned string and clean up unreferenced symbols
   // in symbol table, possibly in parallel.
   void unload_classes_and_cleanup_tables(bool full_gc);
 
-  inline size_t num_regions() const;
-
-  size_t max_regions() const { return _max_regions; }
-
-  // TODO: consider moving this into ShenandoahHeapRegion.
+  inline size_t num_regions() const { return _num_regions; }
 
   BoolObjectClosure* is_alive_closure();
 
@@ -456,6 +428,7 @@ public:
   void cancel_concgc(GCCause::Cause cause);
   void cancel_concgc(ShenandoahCancelCause cause);
 
+  ShenandoahHeapLock* lock() { return &_lock; }
   void assert_heaplock_owned_by_current_thread() PRODUCT_RETURN;
   void assert_heaplock_or_safepoint() PRODUCT_RETURN;
 
@@ -465,10 +438,27 @@ public:
     _alloc_shared_gc,   // Allocate common, outside of GCLAB
     _alloc_tlab,        // Allocate TLAB
     _alloc_gclab,       // Allocate GCLAB
+    _ALLOC_LIMIT,
   } AllocType;
+
+  static const char* alloc_type_to_string(AllocType type) {
+    switch (type) {
+      case _alloc_shared:
+        return "Shared";
+      case _alloc_shared_gc:
+        return "Shared GC";
+      case _alloc_tlab:
+        return "TLAB";
+      case _alloc_gclab:
+        return "GCLAB";
+      default:
+        ShouldNotReachHere();
+        return "";
+    }
+  }
 private:
   HeapWord* allocate_new_lab(size_t word_size, AllocType type);
-  HeapWord* allocate_memory_under_lock(size_t word_size, AllocType type);
+  HeapWord* allocate_memory_under_lock(size_t word_size, AllocType type, bool &new_region);
   HeapWord* allocate_memory(size_t word_size, AllocType type);
   // Shenandoah functionality.
   inline HeapWord* allocate_from_gclab(Thread* thread, size_t size);
@@ -487,14 +477,10 @@ private:
 
   void ref_processing_init();
 
-  void grow_heap_by(size_t num_regions);
-  void ensure_new_regions(size_t num_new_regions);
-
   void set_concurrent_mark_in_progress(bool in_progress);
 
   void oom_during_evacuation();
 
-  HeapWord* allocate_memory_work(size_t word_size, AllocType type);
   HeapWord* allocate_large_memory(size_t word_size);
 
   const char* cancel_cause_to_string(ShenandoahCancelCause cause);
@@ -505,6 +491,7 @@ private:
 
 public:
   void start_deferred_recycling();
+  void immediate_recycle(ShenandoahHeapRegion* r);
   void defer_recycle(ShenandoahHeapRegion* r);
   void finish_deferred_recycle();
 

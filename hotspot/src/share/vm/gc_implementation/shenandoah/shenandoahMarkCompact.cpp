@@ -25,7 +25,6 @@
 #include "code/codeCache.hpp"
 #include "gc_implementation/shenandoah/shenandoahGCTraceTime.hpp"
 #include "gc_implementation/shared/gcTimer.hpp"
-#include "gc_implementation/shared/isGCActiveMark.hpp"
 #include "gc_implementation/shenandoah/brooksPointer.hpp"
 #include "gc_implementation/shenandoah/shenandoahCollectorPolicy.hpp"
 #include "gc_implementation/shenandoah/shenandoahConcurrentMark.inline.hpp"
@@ -68,18 +67,35 @@ public:
 #endif
 };
 
-class ClearInCollectionSetHeapRegionClosure: public ShenandoahHeapRegionClosure {
+class ShenandoahClearRegionStatusClosure: public ShenandoahHeapRegionClosure {
 private:
   ShenandoahHeap* _heap;
+
 public:
+  ShenandoahClearRegionStatusClosure() : _heap(ShenandoahHeap::heap()) {}
 
-  ClearInCollectionSetHeapRegionClosure() : _heap(ShenandoahHeap::heap()) {
-  }
-
-  bool doHeapRegion(ShenandoahHeapRegion* r) {
+  bool heap_region_do(ShenandoahHeapRegion *r) {
     _heap->set_next_top_at_mark_start(r->bottom(), r->top());
     r->clear_live_data();
     r->set_concurrent_iteration_safe_limit(r->top());
+    return false;
+  }
+};
+
+class ShenandoahEnsureHeapActiveClosure: public ShenandoahHeapRegionClosure {
+private:
+  ShenandoahHeap* _heap;
+
+public:
+  ShenandoahEnsureHeapActiveClosure() : _heap(ShenandoahHeap::heap()) {}
+  bool heap_region_do(ShenandoahHeapRegion* r) {
+    if (r->is_trash()) {
+      _heap->immediate_recycle(r);
+    }
+    if (r->is_empty()) {
+      r->make_regular_bypass();
+    }
+    assert (r->is_active(), "only active regions in heap now");
     return false;
   }
 };
@@ -100,7 +116,6 @@ void ShenandoahMarkCompact::do_mark_compact(GCCause::Cause gc_cause) {
   ShenandoahHeap* _heap = ShenandoahHeap::heap();
   {
     ShenandoahGCSession session(/* is_full_gc */true);
-    ShenandoahGCPhase full_gc(ShenandoahCollectorPolicy::full_gc);
 
     GCTracer *_gc_tracer = _heap->tracer();
     if (_gc_tracer->has_reported_gc_start()) {
@@ -111,8 +126,6 @@ void ShenandoahMarkCompact::do_mark_compact(GCCause::Cause gc_cause) {
     _heap->set_full_gc_in_progress(true);
 
     assert(SafepointSynchronize::is_at_safepoint(), "must be at a safepoint");
-    IsGCActiveMark is_active;
-
     assert(Thread::current()->is_VM_thread(), "Do full GC only while world is stopped");
 
     {
@@ -147,8 +160,18 @@ void ShenandoahMarkCompact::do_mark_compact(GCCause::Cause gc_cause) {
       rp->abandon_partial_discovery();
       rp->verify_no_references_recorded();
 
-      ClearInCollectionSetHeapRegionClosure cl;
-      _heap->heap_region_iterate(&cl, false, false);
+      {
+        ShenandoahHeapLocker lock(_heap->lock());
+
+        // e. Make sure all regions are active. This is needed because we are potentially
+        // sliding the data through them
+        ShenandoahEnsureHeapActiveClosure ecl;
+        _heap->heap_region_iterate(&ecl, false, false);
+
+        // f. Clear region statuses, including collection set status
+        ShenandoahClearRegionStatusClosure cl;
+        _heap->heap_region_iterate(&cl, false, false);
+      }
 
       if (ShenandoahVerify) {
         // Full GC should only be called between regular concurrent cycles, therefore
@@ -162,7 +185,7 @@ void ShenandoahMarkCompact::do_mark_compact(GCCause::Cause gc_cause) {
     oopDesc::set_bs(&bs);
 
     {
-      GCTraceTime time("Pause Full", ShenandoahLogInfo, _gc_timer, _gc_tracer->gc_id(), true);
+      GCTraceTime time("Pause Full", PrintGC, _gc_timer, _gc_tracer->gc_id(), true);
 
       if (UseTLAB) {
         _heap->ensure_parsability(true);
@@ -301,7 +324,7 @@ public:
   ShenandoahMCReclaimHumongousRegionClosure() : _heap(ShenandoahHeap::heap()) {
   }
 
-  bool doHeapRegion(ShenandoahHeapRegion* r) {
+  bool heap_region_do(ShenandoahHeapRegion* r) {
     if (r->is_humongous_start()) {
       oop humongous_obj = oop(r->bottom() + BrooksPointer::word_size());
       if (! _heap->is_marked_complete(humongous_obj)) {
@@ -377,13 +400,15 @@ private:
 
   ShenandoahHeapRegion* next_from_region(ShenandoahHeapRegionSet* copy_queue) {
     ShenandoahHeapRegion* from_region = _from_regions->claim_next();
-    while (from_region != NULL && (from_region->is_humongous() || from_region->is_pinned())) {
+
+    // Note: During Full GC after cancelled conc GC, we might have incoming regions
+    // in the collection set. Otherwise we would have just taken care of regular regions.
+    while (from_region != NULL && !(from_region->is_regular() || from_region->is_cset())) {
       from_region = _from_regions->claim_next();
     }
     if (from_region != NULL) {
       assert(copy_queue != NULL, "sanity");
-      assert(! from_region->is_humongous(), "must not get humongous regions here");
-      assert(! from_region->is_pinned(), "no pinned region in mark-compact");
+      assert(from_region->is_regular() || from_region->is_cset(), "only regular/cset regions in mark-compact");
       copy_queue->add_region(from_region);
     }
     return from_region;
@@ -400,7 +425,7 @@ public:
     ShenandoahHeapRegionSet* copy_queue = _copy_queues[worker_id];
     ShenandoahHeapRegion* from_region = next_from_region(copy_queue);
     if (from_region == NULL) return;
-    ShenandoahHeapRegionSet* to_regions = new ShenandoahHeapRegionSet(ShenandoahHeap::heap()->max_regions());
+    ShenandoahHeapRegionSet* to_regions = new ShenandoahHeapRegionSet(ShenandoahHeap::heap()->num_regions());
     ShenandoahPrepareForCompactionObjectClosure cl(to_regions, from_region);
     while (from_region != NULL) {
       assert(from_region != NULL, "sanity");
@@ -428,12 +453,22 @@ void ShenandoahMarkCompact::phase2_calculate_target_addresses(ShenandoahHeapRegi
   ShenandoahHeap* heap = ShenandoahHeap::heap();
   GCTraceTime time("Phase 2: Compute new object addresses", ShenandoahLogDebug, _gc_timer, heap->tracer()->gc_id());
 
-  ShenandoahMCReclaimHumongousRegionClosure cl;
-  heap->heap_region_iterate(&cl);
+  {
+    ShenandoahHeapLocker lock(heap->lock());
+
+    ShenandoahMCReclaimHumongousRegionClosure cl;
+    heap->heap_region_iterate(&cl);
+
+    // After some humongous regions were reclaimed, we need to ensure their
+    // backing storage is active. This is needed because we are potentially
+    // sliding the data through them.
+    ShenandoahEnsureHeapActiveClosure ecl;
+    heap->heap_region_iterate(&ecl, false, false);
+  }
 
   // Initialize copy queues.
   for (uint i = 0; i < heap->max_workers(); i++) {
-    copy_queues[i] = new ShenandoahHeapRegionSet(heap->max_regions());
+    copy_queues[i] = new ShenandoahHeapRegionSet(heap->num_regions());
   }
 
   ShenandoahHeapRegionSet* from_regions = heap->regions();
@@ -606,23 +641,41 @@ public:
     _heap->clear_free_regions();
   }
 
-  bool doHeapRegion(ShenandoahHeapRegion* r) {
+  bool heap_region_do(ShenandoahHeapRegion* r) {
     // Need to reset the complete-top-at-mark-start pointer here because
     // the complete marking bitmap is no longer valid. This ensures
     // size-based iteration in marked_object_iterate().
     _heap->set_complete_top_at_mark_start(r->bottom(), r->bottom());
-    if (r->is_humongous()) {
-      _live += ShenandoahHeapRegion::region_size_bytes();
-    } else {
-      size_t live = r->used();
-      if (live == 0) {
-        r->recycle();
-        _heap->add_free_region(r);
-      }
-      r->set_live_data(live);
-      r->reset_alloc_stats_to_shared();
-      _live += live;
+
+    size_t live = r->used();
+
+    // Turn any lingering non-empty cset regions into regular regions.
+    // This must be the leftover from the cancelled concurrent GC.
+    if (r->is_cset() && live != 0) {
+      r->make_regular_bypass();
     }
+
+    // Reclaim regular/cset regions that became empty
+    if ((r->is_regular() || r->is_cset()) && live == 0) {
+      r->make_trash();
+    }
+
+    // Recycle all trash regions
+    if (r->is_trash()) {
+      _heap->immediate_recycle(r);
+    }
+
+    // Finally, add all suitable regions into the free set
+    if (r->is_alloc_allowed()) {
+      if (_heap->collection_set()->is_in(r)) {
+        _heap->collection_set()->remove_region(r);
+      }
+      _heap->add_free_region(r);
+    }
+
+    r->set_live_data(live);
+    r->reset_alloc_stats_to_shared();
+    _live += live;
     return false;
   }
 
@@ -636,14 +689,12 @@ void ShenandoahMarkCompact::phase4_compact_objects(ShenandoahHeapRegionSet** cop
   ShenandoahCompactObjectsTask compact_task(copy_queues);
   heap->workers()->run_task(&compact_task);
 
-  heap->collection_set()->clear();
-
   // Reset complete bitmap. We're about to reset the complete-top-at-mark-start pointer
   // and must ensure the bitmap is in sync.
   heap->reset_complete_mark_bitmap(heap->workers());
 
   {
-    ShenandoahHeap::ShenandoahHeapLock lock(heap);
+    ShenandoahHeapLocker lock(heap->lock());
     ShenandoahPostCompactClosure post_compact;
     heap->heap_region_iterate(&post_compact);
 
@@ -651,6 +702,7 @@ void ShenandoahMarkCompact::phase4_compact_objects(ShenandoahHeapRegionSet** cop
 
   }
 
+  heap->collection_set()->clear();
   heap->clear_cancelled_concgc();
 
   // Also clear the next bitmap in preparation for next marking.
