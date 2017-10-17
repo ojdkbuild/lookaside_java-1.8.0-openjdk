@@ -84,21 +84,8 @@ public final class SunEC extends Provider {
     }
 
     /**
-     * Cleanup native resources during finalisation.
-     */
-    @Override
-    protected void finalize() {
-        cleanup();
-    }
-
-    /**
      * Initialize the native code.
      */
     private static native void initialize();
-
-    /**
-     * Cleanup in the native layer.
-     */
-    private static native void cleanup();
 
 }

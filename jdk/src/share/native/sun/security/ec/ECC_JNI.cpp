@@ -529,14 +529,12 @@ JNICALL Java_sun_security_ec_SunEC_initialize
 }
 
 JNIEXPORT void
-JNICALL Java_sun_security_ec_SunEC_cleanup
-  (JNIEnv *env, jclass UNUSED(clazz))
+JNICALL JNI_OnUnload
+  (JavaVM *vm, void *reserved)
 {
 #ifdef SYSTEM_NSS
     RNG_RNGShutdown();
-    if (SECOID_Shutdown() != SECSuccess) {
-        ThrowException(env, INTERNAL_ERROR);
-    }
+    SECOID_Shutdown();
 #endif
 }
 
