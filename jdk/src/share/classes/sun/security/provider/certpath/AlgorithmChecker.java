@@ -214,10 +214,6 @@ public final class AlgorithmChecker extends PKIXCertPathChecker {
         return AnchorCertificates.contains(cert);
     }
 
-    Timestamp getJarTimestamp() {
-        return jarTimestamp;
-    }
-
     @Override
     public void init(boolean forward) throws CertPathValidatorException {
         //  Note that this class does not support forward mode.
@@ -274,7 +270,7 @@ public final class AlgorithmChecker extends PKIXCertPathChecker {
 
         AlgorithmParameters currSigAlgParams = algorithmId.getParameters();
         PublicKey currPubKey = cert.getPublicKey();
-        String currSigAlg = ((X509Certificate)cert).getSigAlgName();
+        String currSigAlg = x509Cert.getSigAlgName();
 
         // Check the signature algorithm and parameters against constraints.
         if (!constraints.permits(SIGNATURE_PRIMITIVE_SET, currSigAlg,

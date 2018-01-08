@@ -746,7 +746,7 @@ AdapterHandlerEntry* SharedRuntime::generate_i2c2i_adapters(MacroAssembler *masm
     __ load_klass(rscratch1, receiver);
     __ ldr(tmp, Address(holder, CompiledICHolder::holder_klass_offset()));
     __ cmp(rscratch1, tmp);
-    __ ldr(rmethod, Address(holder, CompiledICHolder::holder_method_offset()));
+    __ ldr(rmethod, Address(holder, CompiledICHolder::holder_metadata_offset()));
     __ br(Assembler::EQ, ok);
     __ far_jump(RuntimeAddress(SharedRuntime::get_ic_miss_stub()));
 
@@ -2545,7 +2545,7 @@ void SharedRuntime::generate_deopt_blob() {
   __ sub(sp, sp, r19);
 
   // Push interpreter frames in a loop
-  __ mov(rscratch1, (address)0xDEADDEAD);        // Make a recognizable pattern
+  __ mov(rscratch1, (address)badHeapOopVal);        // Make a recognizable pattern
   __ mov(rscratch2, rscratch1);
   Label loop;
   __ bind(loop);
