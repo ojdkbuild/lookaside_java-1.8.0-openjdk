@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 1997, 2017, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2014 Red Hat Inc.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -75,10 +74,10 @@ public final class DHKeyPairGenerator extends KeyPairGeneratorSpi {
     private static void checkKeySize(int keysize)
             throws InvalidParameterException {
 
-        if ((keysize < 512) || (keysize > 4096) || ((keysize & 0x3F) != 0)) {
+        if ((keysize < 512) || (keysize > 2048) || ((keysize & 0x3F) != 0)) {
             throw new InvalidParameterException(
                     "DH key size must be multiple of 64, and can only range " +
-                    "from 512 to 4096 (inclusive). " +
+                    "from 512 to 2048 (inclusive). " +
                     "The specific key size " + keysize + " is not supported");
         }
     }

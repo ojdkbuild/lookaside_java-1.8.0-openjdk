@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 1997, 2017, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2014 Red Hat Inc.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -62,11 +61,11 @@ extends AlgorithmParameterGeneratorSpi {
 
     private static void checkKeySize(int keysize)
             throws InvalidParameterException {
-            if ((keysize != 2048) && (keysize != 4096) &&
+            if ((keysize != 2048) &&
             ((keysize < 512) || (keysize > 1024) || (keysize % 64 != 0))) {
             throw new InvalidParameterException(
                     "DH key size must be multiple of 64 and range " +
-                    "from 512 to 1024 (inclusive), or 2048, or 4096. " +
+                    "from 512 to 1024 (inclusive), or 2048. " +
                     "The specific key size " + keysize + " is not supported");
         }
     }
