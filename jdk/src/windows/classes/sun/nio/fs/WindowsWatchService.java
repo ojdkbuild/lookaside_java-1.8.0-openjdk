@@ -468,13 +468,13 @@ class WindowsWatchService
          * resources.
          */
         private void releaseResources(WindowsWatchKey key) {
-            try {
-                CancelIo(key.handle());
-                if (!key.isErrorStartingOverlapped()) {
+            if (!key.isErrorStartingOverlapped()) {
+                try {
+                    CancelIo(key.handle());
                     GetOverlappedResult(key.handle(), key.overlappedAddress());
+                } catch (WindowsException expected) {
+                    // expected as I/O operation has been cancelled
                 }
-            } catch (WindowsException expected) {
-                // expected as I/O operation has been cancelled
             }
             CloseHandle(key.handle());
             closeAttachedEvent(key.overlappedAddress());

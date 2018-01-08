@@ -129,7 +129,7 @@ public class OomDebugTest extends TestScaffold {
     public OomDebugTest(String[] args) {
         super(args);
         if (args.length != 2) {
-            throw new RuntimeException("Wrong number of command-line arguments specified.");
+            throw new RuntimeException("Test failed unexpectedly.");
         }
         this.testMethod = args[1];
     }
@@ -387,7 +387,7 @@ public class OomDebugTest extends TestScaffold {
             RESULT_FILE.delete();
             System.out.println("All " + totalTests + " tests passed.");
         } else {
-            System.out.println("DEBUG: More tests to run. Continuing.");
+            System.out.println("DEBUG: More tests to run. Coninuing.");
             FileOutputStream fout = null;
             try {
                 fout = new FileOutputStream(RESULT_FILE);
