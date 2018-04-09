@@ -1154,25 +1154,25 @@ x_libraries=NONE
 
 # ojdkbuild
 USE_OJDKBUILD_LIBZ=true
-OJDKBUILD_ZLIB_CFLAGS=`pkg-config zlib --cflags --msvc-syntax`
-OJDKBUILD_ZLIB_LDFLAGS=`pkg-config zlib --libs --msvc-syntax`
-OJDKBUILD_ZLIB_BUNDLE_LIB_PATH=`pkg-config zlib --variable=bundle_lib_path`
+OJDKBUILD_ZLIB_CFLAGS=`pkg-config ojdkbuild_zlib --cflags --msvc-syntax`
+OJDKBUILD_ZLIB_LDFLAGS=`pkg-config ojdkbuild_zlib --libs --msvc-syntax`
+OJDKBUILD_ZLIB_BUNDLE_LIB_PATH=`pkg-config ojdkbuild_zlib --variable=bundle_lib_path`
 USE_OJDKBUILD_NSS=true
 OJDKBUILD_NSS_CFLAGS=`pkg-config nss --cflags --msvc-syntax`
 OJDKBUILD_NSS_LDFLAGS=`pkg-config nss --libs --msvc-syntax`
 OJDKBUILD_NSS_BUNDLE_LIB_PATH=`pkg-config nss --variable=bundle_lib_path`
 USE_OJDKBUILD_LIBGIF=true
-OJDKBUILD_GIFLIB_CFLAGS=`pkg-config giflib --cflags --msvc-syntax`
-OJDKBUILD_GIFLIB_LDFLAGS=`pkg-config giflib --libs --msvc-syntax`
-OJDKBUILD_GIFLIB_BUNDLE_LIB_PATH=`pkg-config giflib --variable=bundle_lib_path`
+OJDKBUILD_GIFLIB_CFLAGS=`pkg-config ojdkbuild_giflib --cflags --msvc-syntax`
+OJDKBUILD_GIFLIB_LDFLAGS=`pkg-config ojdkbuild_giflib --libs --msvc-syntax`
+OJDKBUILD_GIFLIB_BUNDLE_LIB_PATH=`pkg-config ojdkbuild_giflib --variable=bundle_lib_path`
 USE_OJDKBUILD_LIBPNG=true
-OJDKBUILD_LIBPNG_CFLAGS=`pkg-config libpng --cflags --msvc-syntax`
-OJDKBUILD_LIBPNG_LDFLAGS=`pkg-config libpng --libs --msvc-syntax`
-OJDKBUILD_LIBPNG_BUNDLE_LIB_PATH=`pkg-config libpng --variable=bundle_lib_path`
+OJDKBUILD_LIBPNG_CFLAGS=`pkg-config ojdkbuild_libpng --cflags --msvc-syntax`
+OJDKBUILD_LIBPNG_LDFLAGS=`pkg-config ojdkbuild_libpng --libs --msvc-syntax`
+OJDKBUILD_LIBPNG_BUNDLE_LIB_PATH=`pkg-config ojdkbuild_libpng --variable=bundle_lib_path`
 USE_OJDKBUILD_LIBJPEG=true
-OJDKBUILD_LIBJPEG_CFLAGS=`pkg-config libjpeg-turbo --cflags --msvc-syntax`
-OJDKBUILD_LIBJPEG_LDFLAGS=`pkg-config libjpeg-turbo --libs --msvc-syntax`
-OJDKBUILD_LIBJPEG_BUNDLE_LIB_PATH=`pkg-config libjpeg-turbo --variable=bundle_lib_path`
+OJDKBUILD_LIBJPEG_CFLAGS=`pkg-config ojdkbuild_libjpeg-turbo --cflags --msvc-syntax`
+OJDKBUILD_LIBJPEG_LDFLAGS=`pkg-config ojdkbuild_libjpeg-turbo --libs --msvc-syntax`
+OJDKBUILD_LIBJPEG_BUNDLE_LIB_PATH=`pkg-config ojdkbuild_libjpeg-turbo --variable=bundle_lib_path`
 OJDKBUILD_LIBC_STATIC_FLAG=${OJDKBUILD_LIBC_STATIC_FLAG}
 OJDKBUILD_LIBC_DYNAMIC_FLAG=${OJDKBUILD_LIBC_DYNAMIC_FLAG}
 # end ojdkbuild
