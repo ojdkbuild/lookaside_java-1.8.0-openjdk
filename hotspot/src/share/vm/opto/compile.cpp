@@ -416,9 +416,6 @@ void Compile::remove_useless_nodes(Unique_Node_List &useful) {
         record_for_igvn(n->fast_out(i));
       }
     }
-    if (n->is_Phi() && n->as_Phi()->has_only_data_users()) {
-      record_for_igvn(n);
-    }
   }
   // Remove useless macro and predicate opaq nodes
   for (int i = C->macro_count()-1; i >= 0; i--) {
@@ -2322,9 +2319,11 @@ void Compile::Optimize() {
     igvn.optimize();
   }
 
+#ifdef ASSERT
   if (UseShenandoahGC && ShenandoahVerifyOptoBarriers) {
     ShenandoahBarrierNode::verify(C->root());
   }
+#endif
 
   {
     NOT_PRODUCT( TracePhase t2("macroExpand", &_t_macroExpand, TimeCompiler); )
@@ -2341,11 +2340,7 @@ void Compile::Optimize() {
       PhaseIdealLoop ideal_loop(igvn, false, true);
       if (failing()) return;
       PhaseIdealLoop::verify(igvn);
-#ifdef ASSERT
-      if (UseShenandoahGC) {
-        ShenandoahBarrierNode::verify_raw_mem(C->root());
-      }
-#endif
+      DEBUG_ONLY(ShenandoahBarrierNode::verify_raw_mem(C->root());)
     }
   }
 
@@ -3149,7 +3144,6 @@ void Compile::final_graph_reshaping_impl( Node *n, Final_Reshape_Counts &frc) {
         n->subsume_by(unique_in, this);
       }
     }
-    assert(!n->as_Phi()->has_only_data_users(), "memory Phi has no memory use");
     break;
 
 #endif
@@ -4255,4 +4249,25 @@ Node* Compile::constrained_convI2L(PhaseGVN* phase, Node* value, const TypeInt* 
 bool Compile::randomized_select(int count) {
   assert(count > 0, "only positive");
   return (os::random() & RANDOMIZED_DOMAIN_MASK) < (RANDOMIZED_DOMAIN / count);
+}
+
+void Compile::shenandoah_eliminate_g1_wb_pre(Node* call, PhaseIterGVN* igvn) {
+  assert(UseShenandoahGC && call->is_g1_wb_pre_call(), "");
+  Node* c = call->as_Call()->proj_out(TypeFunc::Control);
+  c = c->unique_ctrl_out();
+  assert(c->is_Region() && c->req() == 3, "where's the pre barrier control flow?");
+  c = c->unique_ctrl_out();
+  assert(c->is_Region() && c->req() == 3, "where's the pre barrier control flow?");
+  Node* iff = c->in(1)->is_IfProj() ? c->in(1)->in(0) : c->in(2)->in(0);
+  assert(iff->is_If(), "expect test");
+  if (!iff->is_shenandoah_marking_if(igvn)) {
+    c = c->unique_ctrl_out();
+    assert(c->is_Region() && c->req() == 3, "where's the pre barrier control flow?");
+    iff = c->in(1)->is_IfProj() ? c->in(1)->in(0) : c->in(2)->in(0);
+    assert(iff->is_shenandoah_marking_if(igvn), "expect marking test");
+  }
+  Node* cmpx = iff->in(1)->in(1);
+  igvn->replace_node(cmpx, igvn->makecon(TypeInt::CC_EQ));
+  igvn->rehash_node_delayed(call);
+  call->del_req(call->req()-1);
 }

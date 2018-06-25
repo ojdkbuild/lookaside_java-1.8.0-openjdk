@@ -99,16 +99,21 @@ public:
     return true;
   };
 
+  static bool is_evacuation_in_progress_test(Node *n);
+  static bool is_gc_state_load(Node *n);
+
   static bool needs_barrier(PhaseTransform* phase, ShenandoahBarrierNode* orig, Node* n, Node* rb_mem, bool allow_fromspace);
 
-  static void verify(RootNode* root);
 #ifdef ASSERT
+  static void report_verify_failure(const char* msg, Node* n1 = NULL, Node* n2 = NULL);
+  static void verify(RootNode* root);
   static void verify_raw_mem(RootNode* root);
 #endif
 #ifndef PRODUCT
   virtual void dump_spec(outputStream *st) const;
 #endif
   static void do_cmpp_if(GraphKit& kit, Node*& taken_branch, Node*& untaken_branch, Node*& taken_memory, Node*& untaken_memory);
+  static const TypePtr* fix_addp_type(const TypePtr* res, Node* base);
 
 protected:
   uint hash() const;
@@ -131,9 +136,17 @@ class ShenandoahReadBarrierNode : public ShenandoahBarrierNode {
 public:
   ShenandoahReadBarrierNode(Node* ctrl, Node* mem, Node* obj)
     : ShenandoahBarrierNode(ctrl, mem, obj, true) {
+    assert(UseShenandoahGC && (ShenandoahReadBarrier ||
+                               ShenandoahWriteBarrier ||
+                               ShenandoahAcmpBarrier),
+           "should be enabled");
   }
   ShenandoahReadBarrierNode(Node* ctrl, Node* mem, Node* obj, bool allow_fromspace)
     : ShenandoahBarrierNode(ctrl, mem, obj, allow_fromspace) {
+    assert(UseShenandoahGC && (ShenandoahReadBarrier ||
+                               ShenandoahWriteBarrier ||
+                               ShenandoahAcmpBarrier),
+           "should be enabled");
   }
 
   virtual Node *Ideal(PhaseGVN *phase, bool can_reshape);
@@ -152,8 +165,8 @@ class ShenandoahWriteBarrierNode : public ShenandoahBarrierNode {
 public:
   ShenandoahWriteBarrierNode(Compile* C, Node* ctrl, Node* mem, Node* obj)
     : ShenandoahBarrierNode(ctrl, mem, obj, false) {
+    assert(UseShenandoahGC && ShenandoahWriteBarrier, "should be enabled");
     C->add_shenandoah_barrier(this);
-    //tty->print("new wb: "); dump();
   }
 
   virtual int Opcode() const;
@@ -185,6 +198,7 @@ class ShenandoahWBMemProjNode : public ProjNode {
 public:
   enum {SWBMEMPROJCON = (uint)-3};
   ShenandoahWBMemProjNode(Node *src) : ProjNode( src, SWBMEMPROJCON) {
+    assert(UseShenandoahGC && ShenandoahWriteBarrier, "should be enabled");
     assert(src->Opcode() == Op_ShenandoahWriteBarrier || src->is_Mach(), "epxect wb");
   }
   virtual Node* Identity(PhaseTransform* phase);

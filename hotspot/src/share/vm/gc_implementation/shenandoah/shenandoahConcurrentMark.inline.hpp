@@ -25,6 +25,7 @@
 #define SHARE_VM_GC_SHENANDOAH_SHENANDOAHCONCURRENTMARK_INLINE_HPP
 
 #include "gc_implementation/shenandoah/brooksPointer.hpp"
+#include "gc_implementation/shenandoah/shenandoahAsserts.hpp"
 #include "gc_implementation/shenandoah/shenandoahBarrierSet.inline.hpp"
 #include "gc_implementation/shenandoah/shenandoahConcurrentMark.hpp"
 #include "gc_implementation/shenandoah/shenandoahHeap.inline.hpp"
@@ -37,13 +38,9 @@ template <class T, bool COUNT_LIVENESS>
 void ShenandoahConcurrentMark::do_task(ShenandoahObjToScanQueue* q, T* cl, jushort* live_data, ShenandoahMarkTask* task) {
   oop obj = task->obj();
 
-  assert(obj != NULL, "expect non-null object");
-  assert(oopDesc::unsafe_equals(obj, ShenandoahBarrierSet::resolve_oop_static_not_null(obj)), "expect forwarded obj in queue");
-  assert(_heap->cancelled_concgc()
-         || oopDesc::bs()->is_safe(obj),
-         "we don't want to mark objects in from-space");
-  assert(_heap->is_in(obj), "referenced objects must be in the heap. No?");
-  assert(_heap->is_marked_next(obj), "only marked objects on task queue");
+  shenandoah_assert_not_forwarded(NULL, obj);
+  shenandoah_assert_marked_next(NULL, obj);
+  shenandoah_assert_not_in_cset_except(NULL, obj, _heap->cancelled_concgc());
 
   if (task->is_not_chunked()) {
     if (COUNT_LIVENESS) count_liveness(live_data, obj);
@@ -69,22 +66,41 @@ void ShenandoahConcurrentMark::do_task(ShenandoahObjToScanQueue* q, T* cl, jusho
 
 inline void ShenandoahConcurrentMark::count_liveness(jushort* live_data, oop obj) {
   size_t region_idx = _heap->heap_region_index_containing(obj);
-  jushort cur = live_data[region_idx];
-  int size = obj->size() + BrooksPointer::word_size();
-  int max = (1 << (sizeof(jushort) * 8)) - 1;
-  if (size >= max) {
-    // too big, add to region data directly
-    _heap->regions()->get(region_idx)->increase_live_data_words(size);
-  } else {
-    int new_val = cur + size;
-    if (new_val >= max) {
-      // overflow, flush to region data
-      _heap->regions()->get(region_idx)->increase_live_data_words(new_val);
-      live_data[region_idx] = 0;
+  ShenandoahHeapRegion* region = _heap->get_region(region_idx);
+  if (!region->is_humongous_start()) {
+    assert(!region->is_humongous(), "Cannot have continuations here");
+    jushort cur = live_data[region_idx];
+    size_t size = obj->size() + BrooksPointer::word_size();
+    size_t max = (1 << (sizeof(jushort) * 8)) - 1;
+    if (size >= max) {
+      // too big, add to region data directly
+      region->increase_live_data_gc_words(size);
     } else {
-      // still good, remember in locals
-      live_data[region_idx] = (jushort) new_val;
+      size_t new_val = cur + size;
+      if (new_val >= max) {
+        // overflow, flush to region data
+        region->increase_live_data_gc_words(new_val);
+        live_data[region_idx] = 0;
+      } else {
+        // still good, remember in locals
+        live_data[region_idx] = (jushort) new_val;
+      }
     }
+  } else {
+    count_liveness_humongous(obj);
+  }
+}
+
+inline void ShenandoahConcurrentMark::count_liveness_humongous(oop obj) {
+  shenandoah_assert_in_correct_region(NULL, obj);
+  size_t region_idx = _heap->heap_region_index_containing(obj);
+  size_t size = obj->size() + BrooksPointer::word_size();
+  size_t num_regions = ShenandoahHeapRegion::required_regions(size * HeapWordSize);
+
+  for (size_t i = region_idx; i < region_idx + num_regions; i++) {
+    ShenandoahHeapRegion* chain_reg = _heap->get_region(i);
+    assert(chain_reg->is_humongous(), "Expecting a humongous region");
+    chain_reg->increase_live_data_gc_words(chain_reg->used() >> LogHeapWordSize);
   }
 }
 
@@ -220,36 +236,32 @@ inline void ShenandoahConcurrentMark::mark_through_ref(T *p, ShenandoahHeap* hea
     case NONE:
       break;
     case RESOLVE:
-      obj = ShenandoahBarrierSet::resolve_oop_static_not_null(obj);
+      obj = ShenandoahBarrierSet::resolve_forwarded_not_null(obj);
       break;
     case SIMPLE:
       // We piggy-back reference updating to the marking tasks.
-      obj = heap->update_oop_ref_not_null(p, obj);
+      obj = heap->update_with_forwarded_not_null(p, obj);
       break;
     case CONCURRENT:
-      obj = heap->maybe_update_oop_ref_not_null(p, obj);
+      obj = heap->maybe_update_with_forwarded_not_null(p, obj);
       break;
     default:
       ShouldNotReachHere();
     }
-    assert(oopDesc::unsafe_equals(obj, ShenandoahBarrierSet::resolve_oop_static(obj)), "need to-space object here");
 
     // Note: Only when concurrently updating references can obj become NULL here.
     // It happens when a mutator thread beats us by writing another value. In that
     // case we don't need to do anything else.
     if (UPDATE_REFS != CONCURRENT || !oopDesc::is_null(obj)) {
-      assert(!oopDesc::is_null(obj), "Must not be null here");
-      assert(heap->is_in(obj), err_msg("We shouldn't be calling this on objects not in the heap: " PTR_FORMAT, p2i(obj)));
-      assert(oopDesc::bs()->is_safe(obj), "Only mark objects in from-space");
-      if (heap->mark_next(obj)) {
-        log_develop_trace(gc, marking)("Marked obj: " PTR_FORMAT, p2i((HeapWord*) obj));
+      shenandoah_assert_not_forwarded(p, obj);
+      shenandoah_assert_not_in_cset_except(p, obj, heap->cancelled_concgc());
 
+      if (heap->mark_next(obj)) {
         bool pushed = q->push(ShenandoahMarkTask(obj));
         assert(pushed, "overflow queue should always succeed pushing");
-      } else {
-        log_develop_trace(gc, marking)("Failed to mark obj (already marked): " PTR_FORMAT, p2i((HeapWord*) obj));
-        assert(heap->is_marked_next(obj), "Consistency: should be marked.");
       }
+
+      shenandoah_assert_marked_next(p, obj);
     }
   }
 }

@@ -70,7 +70,7 @@ public:
   void write_ref_array_work(MemRegion r);
 
   template <class T> void
-  write_ref_array_pre_work(T* dst, int count);
+  write_ref_array_pre_work(T* dst, size_t count);
 
   void write_ref_array_pre(oop* dst, int count, bool dest_uninitialized);
 
@@ -93,9 +93,8 @@ public:
 
   virtual oop read_barrier(oop src);
 
-  static inline oop resolve_oop_static_not_null(oop p);
-
-  static inline oop resolve_oop_static(oop p);
+  static inline oop resolve_forwarded_not_null(oop p);
+  static inline oop resolve_forwarded(oop p);
 
   virtual oop write_barrier(oop obj);
   static oopDesc* write_barrier_IRT(oopDesc* src);
@@ -105,9 +104,8 @@ public:
   bool obj_equals(narrowOop obj1, narrowOop obj2);
 
 #ifdef ASSERT
-  virtual bool is_safe(oop o);
-  virtual bool is_safe(narrowOop o);
   virtual void verify_safe_oop(oop p);
+  virtual void verify_safe_oop(narrowOop p);
 #endif
 
 private:

@@ -582,19 +582,9 @@ class MacroAssembler: public Assembler {
   void verify_oop(Register reg, const char* s = "broken oop");
   void verify_oop_addr(Address addr, const char * s = "broken oop addr");
 
+#if INCLUDE_ALL_GCS
   void in_heap_check(Register raddr, Register tmp, Label& done);
-  void shenandoah_cset_check(Register raddr, Register tmp1, Register tmp2, Label& done);
-
-  void _shenandoah_store_addr_check(Register dst, const char* msg, const char* file, int line);
-  void _shenandoah_store_addr_check(Address dst, const char* msg, const char* file, int line);
-#define shenandoah_store_addr_check(reg) _shenandoah_store_addr_check(reg, "oop not safe for writing", __FILE__, __LINE__)
-
-  void _shenandoah_store_check(Address addr, Register value, const char* msg, const char* file, int line);
-  void _shenandoah_store_check(Register addr, Register value, const char* msg, const char* file, int line);
-#define shenandoah_store_check(addr, value) _shenandoah_store_check(addr, value, "oop not safe for writing", __FILE__, __LINE__)
-
-  void _shenandoah_lock_check(Register dst, const char* msg, const char* file, int line);
-#define shenandoah_lock_check(reg) _shenandoah_lock_check(reg, "lock/oop not safe for writing", __FILE__, __LINE__)
+#endif
 
   // TODO: verify method and klass metadata (compare against vptr?)
   void _verify_method_ptr(Register reg, const char * msg, const char * file, int line) {}
@@ -769,11 +759,13 @@ class MacroAssembler: public Assembler {
 
   void cmpxchgptr(Register reg, Address adr);
 
+#if INCLUDE_ALL_GCS
   // Special Shenandoah CAS implementation that handles false negatives
   // due to concurrent evacuation.
   void cmpxchg_oop_shenandoah(Register res, Address addr, Register oldval, Register newval,
                               bool exchange,
                               Register tmp1, Register tmp2);
+#endif
 
   void locked_cmpxchgptr(Register reg, AddressLiteral adr);
 

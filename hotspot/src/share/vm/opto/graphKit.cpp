@@ -28,6 +28,7 @@
 #include "gc_implementation/g1/heapRegion.hpp"
 #include "gc_interface/collectedHeap.hpp"
 #include "gc_implementation/shenandoah/brooksPointer.hpp"
+#include "gc_implementation/shenandoah/shenandoahHeap.hpp"
 #include "memory/barrierSet.hpp"
 #include "memory/cardTableModRefBS.hpp"
 #include "opto/addnode.hpp"
@@ -3942,7 +3943,16 @@ void GraphKit::g1_write_barrier_pre(bool do_load,
   Node* index_adr   = __ AddP(no_base, tls, __ ConX(index_offset));
 
   // Now some of the values
-  Node* marking = __ load(__ ctrl(), marking_adr, TypeInt::INT, active_type, Compile::AliasIdxRaw);
+  Node* marking;
+  if (UseShenandoahGC) {
+    Node* gc_state = __ AddP(no_base, tls, __ ConX(in_bytes(JavaThread::gc_state_offset())));
+    Node* ld = __ load(__ ctrl(), gc_state, TypeInt::BYTE, T_BYTE, Compile::AliasIdxRaw);
+    marking = __ AndI(ld, __ ConI(ShenandoahHeap::MARKING));
+    assert(ShenandoahWriteBarrierNode::is_gc_state_load(ld), "Should match the shape");
+  } else {
+    assert(UseG1GC, "should be");
+    marking = __ load(__ ctrl(), marking_adr, TypeInt::INT, active_type, Compile::AliasIdxRaw);
+  }
 
   // if (!marking)
   __ if_then(marking, BoolTest::ne, zero, unlikely); {
@@ -4157,7 +4167,7 @@ Node* GraphKit::load_String_length(Node* ctrl, Node* str) {
     const TypePtr* count_field_type = string_type->add_offset(count_offset);
     int count_field_idx = C->get_alias_index(count_field_type);
 
-    if (! ShenandoahOptimizeFinals) {
+    if (! ShenandoahOptimizeInstanceFinals) {
       str = shenandoah_read_barrier(str);
     }
 
@@ -4179,7 +4189,7 @@ Node* GraphKit::load_String_value(Node* ctrl, Node* str) {
                                                    ciTypeArrayKlass::make(T_CHAR), true, 0);
   int value_field_idx = C->get_alias_index(value_field_type);
 
-  if (! ShenandoahOptimizeFinals) {
+  if (!ShenandoahOptimizeInstanceFinals) {
     str = shenandoah_read_barrier(str);
   }
 

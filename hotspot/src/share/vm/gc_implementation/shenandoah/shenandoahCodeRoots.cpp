@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Red Hat, Inc. and/or its affiliates.
+ * Copyright (c) 2017, 2018, Red Hat, Inc. and/or its affiliates.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -117,7 +117,6 @@ volatile jint ShenandoahCodeRoots::_recorded_nmethods_lock;
 GrowableArray<nmethod*>* ShenandoahCodeRoots::_recorded_nmethods;
 
 void ShenandoahCodeRoots::initialize() {
-  ResourceMark rm;
   _recorded_nmethods_lock = 0;
   _recorded_nmethods = new (ResourceObj::C_HEAP, mtGC) GrowableArray<nmethod*>(100, true, mtGC);
 }
@@ -194,7 +193,7 @@ ShenandoahCsetCodeRootsIterator ShenandoahCodeRoots::cset_iterator() {
 
 ShenandoahCodeRootsIterator::ShenandoahCodeRootsIterator() :
         _claimed(0), _heap(ShenandoahHeap::heap()),
-        _par_iterator(CodeCache::parallel_iterator()), _seq_claimed(0) {
+        _par_iterator(CodeCache::parallel_iterator()) {
   switch (ShenandoahCodeRootsStyle) {
     case 0:
     case 1:
@@ -224,7 +223,7 @@ template<bool CSET_FILTER>
 void ShenandoahCodeRootsIterator::dispatch_parallel_blobs_do(CodeBlobClosure *f) {
   switch (ShenandoahCodeRootsStyle) {
     case 0:
-      if (Atomic::cmpxchg(1, &_seq_claimed, 0) == 0) {
+      if (_seq_claimed.try_set()) {
         CodeCache::blobs_do(f);
       }
       break;
@@ -250,7 +249,7 @@ void ShenandoahCsetCodeRootsIterator::possibly_parallel_blobs_do(CodeBlobClosure
 
 template <bool CSET_FILTER>
 void ShenandoahCodeRootsIterator::fast_parallel_blobs_do(CodeBlobClosure *f) {
-  assert(SafepointSynchronize::is_at_safepoint(), "Must be at safepoint");
+  assert(ShenandoahSafepoint::is_at_shenandoah_safepoint(), "Must be at safepoint");
 
   size_t stride = 256; // educated guess
 

@@ -27,7 +27,7 @@
 #include "utilities/taskqueue.hpp"
 #include "utilities/workgroup.hpp"
 #include "gc_implementation/shenandoah/shenandoahTaskqueue.hpp"
-#include "gc_implementation/shenandoah/shenandoahCollectorPolicy.hpp"
+#include "gc_implementation/shenandoah/shenandoahPhaseTimings.hpp"
 
 class ShenandoahConcurrentMark;
 
@@ -39,10 +39,7 @@ private:
   // The per-worker-thread work queues
   ShenandoahObjToScanQueueSet* _task_queues;
 
-  bool _process_references;
-  bool _unload_classes;
-
-  volatile jbyte _claimed_codecache;
+  ShenandoahSharedFlag _claimed_codecache;
 
   // Used for buffering per-region liveness data.
   // Needed since ShenandoahHeapRegion uses atomics to update liveness.
@@ -65,62 +62,58 @@ private:
   inline void do_chunked_array(ShenandoahObjToScanQueue* q, T* cl, oop array, int chunk, int pow);
 
   inline void count_liveness(jushort* live_data, oop obj);
+  inline void count_liveness_humongous(oop obj);
 
   // Actual mark loop with closures set up
   template <class T, bool CANCELLABLE, bool DRAIN_SATB, bool COUNT_LIVENESS>
   void mark_loop_work(T* cl, jushort* live_data, uint worker_id, ParallelTaskTerminator *t);
 
-  template <bool CANCELLABLE, bool DRAIN_SATB, bool COUNT_LIVENESS, bool CLASS_UNLOAD, bool UPDATE_REFS>
-  void mark_loop_prework(uint worker_id, ParallelTaskTerminator *terminator, ReferenceProcessor *rp);
+  template <bool CANCELLABLE, bool DRAIN_SATB, bool COUNT_LIVENESS>
+  void mark_loop_prework(uint w, ParallelTaskTerminator *t, ReferenceProcessor *rp,
+                         bool class_unload, bool update_refs);
 
   // ------------------------ Currying dynamic arguments to template args ----------------------------
 
-  template <bool B1, bool B2, bool B3, bool B4>
-  void mark_loop_4(uint w, ParallelTaskTerminator* t, ReferenceProcessor* rp, bool b5) {
-    if (b5) {
-      mark_loop_prework<B1, B2, B3, B4, true>(w, t, rp);
+  template <bool CANCELLABLE, bool DRAIN_SATB>
+  void mark_loop_2(uint w, ParallelTaskTerminator* t, ReferenceProcessor* rp,
+                   bool count_liveness,
+                   bool class_unload, bool update_refs) {
+    if (count_liveness) {
+      mark_loop_prework<CANCELLABLE, DRAIN_SATB, true>(w, t, rp, class_unload, update_refs);
     } else {
-      mark_loop_prework<B1, B2, B3, B4, false>(w, t, rp);
+      mark_loop_prework<CANCELLABLE, DRAIN_SATB, false>(w, t, rp, class_unload, update_refs);
     }
   };
 
-  template <bool B1, bool B2, bool B3>
-  void mark_loop_3(uint w, ParallelTaskTerminator* t, ReferenceProcessor* rp, bool b4, bool b5) {
-    if (b4) {
-      mark_loop_4<B1, B2, B3, true>(w, t, rp, b5);
+  template <bool CANCELLABLE>
+  void mark_loop_1(uint w, ParallelTaskTerminator* t, ReferenceProcessor* rp,
+                   bool drain_satb, bool count_liveness,
+                   bool class_unload, bool update_refs) {
+    if (drain_satb) {
+      mark_loop_2<CANCELLABLE, true>(w, t, rp, count_liveness, class_unload, update_refs);
     } else {
-      mark_loop_4<B1, B2, B3, false>(w, t, rp, b5);
-    }
-  };
-
-  template <bool B1, bool B2>
-  void mark_loop_2(uint w, ParallelTaskTerminator* t, ReferenceProcessor* rp, bool b3, bool b4, bool b5) {
-    if (b3) {
-      mark_loop_3<B1, B2, true>(w, t, rp, b4, b5);
-    } else {
-      mark_loop_3<B1, B2, false>(w, t, rp, b4, b5);
-    }
-  };
-
-  template <bool B1>
-  void mark_loop_1(uint w, ParallelTaskTerminator* t, ReferenceProcessor* rp, bool b2, bool b3, bool b4, bool b5) {
-    if (b2) {
-      mark_loop_2<B1, true>(w, t, rp, b3, b4, b5);
-    } else {
-      mark_loop_2<B1, false>(w, t, rp, b3, b4, b5);
+      mark_loop_2<CANCELLABLE, false>(w, t, rp, count_liveness, class_unload, update_refs);
     }
   };
 
   // ------------------------ END: Currying dynamic arguments to template args ----------------------------
-
 public:
+  // Mark loop entry.
+  // Translates dynamic arguments to template parameters with progressive currying.
+  void mark_loop(uint worker_id, ParallelTaskTerminator* terminator, ReferenceProcessor *rp,
+                 bool cancellable, bool drain_satb, bool count_liveness,
+                 bool class_unload, bool update_refs) {
+    if (cancellable) {
+      mark_loop_1<true>(worker_id, terminator, rp, drain_satb, count_liveness, class_unload, update_refs);
+    } else {
+      mark_loop_1<false>(worker_id, terminator, rp, drain_satb, count_liveness, class_unload, update_refs);
+    }
+  }
+
   // We need to do this later when the heap is already created.
   void initialize(uint workers);
 
-  void set_process_references(bool pr);
   bool process_references() const;
-
-  void set_unload_classes(bool uc);
   bool unload_classes() const;
 
   bool claim_codecache();
@@ -134,23 +127,12 @@ public:
   // Prepares unmarked root objects by marking them and putting
   // them into the marking task queue.
   void init_mark_roots();
-  void mark_roots(ShenandoahCollectorPolicy::TimingPhase root_phase);
-  void update_roots(ShenandoahCollectorPolicy::TimingPhase root_phase);
+  void mark_roots(ShenandoahPhaseTimings::Phase root_phase);
+  void update_roots(ShenandoahPhaseTimings::Phase root_phase);
 
   void shared_finish_mark_from_roots(bool full_gc);
   void finish_mark_from_roots();
   // Those are only needed public because they're called from closures.
-
-  // Mark loop entry.
-  // Translates dynamic arguments to template parameters with progressive currying.
-  void mark_loop(uint worker_id, ParallelTaskTerminator* terminator, ReferenceProcessor *rp,
-                 bool cancellable, bool drain_satb, bool count_liveness, bool class_unload, bool update_refs) {
-    if (cancellable) {
-      mark_loop_1<true>(worker_id, terminator, rp, drain_satb, count_liveness, class_unload, update_refs);
-    } else {
-      mark_loop_1<false>(worker_id, terminator, rp, drain_satb, count_liveness, class_unload, update_refs);
-    }
-  }
 
   inline bool try_queue(ShenandoahObjToScanQueue* q, ShenandoahMarkTask &task);
 
@@ -167,6 +149,7 @@ public:
 
   void preclean_weak_refs();
 
+  void concurrent_scan_code_roots(uint worker_id, ReferenceProcessor* rp, bool update_ref);
 private:
 
   void weak_refs_work(bool full_gc);

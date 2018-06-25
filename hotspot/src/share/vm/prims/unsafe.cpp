@@ -204,37 +204,40 @@ jint Unsafe_invocation_key_to_method_slot(jint key) {
 
 // Get/SetObject must be special-cased, since it works with handles.
 
+// We could be accessing the referent field in a reference
+// object. If G1 is enabled then we need to register non-null
+// referent with the SATB barrier.
+
+#if INCLUDE_ALL_GCS
+static bool is_java_lang_ref_Reference_access(oop o, jlong offset) {
+  if (offset == java_lang_ref_Reference::referent_offset && o != NULL) {
+    Klass* k = o->klass();
+    if (InstanceKlass::cast(k)->reference_type() != REF_NONE) {
+      assert(InstanceKlass::cast(k)->is_subclass_of(SystemDictionary::Reference_klass()), "sanity");
+      return true;
+    }
+  }
+  return false;
+}
+#endif
+
+static void ensure_satb_referent_alive(oop o, jlong offset, oop v) {
+#if INCLUDE_ALL_GCS
+  if ((UseG1GC || (UseShenandoahGC && ShenandoahSATBBarrier)) && v != NULL && is_java_lang_ref_Reference_access(o, offset)) {
+    G1SATBCardTableModRefBS::enqueue(v);
+  }
+#endif
+}
+
 // The xxx140 variants for backward compatibility do not allow a full-width offset.
 UNSAFE_ENTRY(jobject, Unsafe_GetObject140(JNIEnv *env, jobject unsafe, jobject obj, jint offset))
   UnsafeWrapper("Unsafe_GetObject");
   if (obj == NULL)  THROW_0(vmSymbols::java_lang_NullPointerException());
   GET_OOP_FIELD(obj, offset, v)
-  jobject ret = JNIHandles::make_local(env, v);
-#if INCLUDE_ALL_GCS
-  // We could be accessing the referent field in a reference
-  // object. If G1 is enabled then we need to register a non-null
-  // referent with the SATB barrier.
-  if (UseG1GC || UseShenandoahGC) {
-    bool needs_barrier = false;
 
-    if (ret != NULL) {
-      if (offset == java_lang_ref_Reference::referent_offset) {
-        oop o = JNIHandles::resolve_non_null(obj);
-        Klass* k = o->klass();
-        if (InstanceKlass::cast(k)->reference_type() != REF_NONE) {
-          assert(InstanceKlass::cast(k)->is_subclass_of(SystemDictionary::Reference_klass()), "sanity");
-          needs_barrier = true;
-        }
-      }
-    }
+  ensure_satb_referent_alive(p, offset, v);
 
-    if (needs_barrier) {
-      oop referent = JNIHandles::resolve(ret);
-      G1SATBCardTableModRefBS::enqueue(referent);
-    }
-  }
-#endif // INCLUDE_ALL_GCS
-  return ret;
+  return JNIHandles::make_local(env, v);;
 UNSAFE_END
 
 UNSAFE_ENTRY(void, Unsafe_SetObject140(JNIEnv *env, jobject unsafe, jobject obj, jint offset, jobject x_h))
@@ -267,32 +270,10 @@ UNSAFE_END
 UNSAFE_ENTRY(jobject, Unsafe_GetObject(JNIEnv *env, jobject unsafe, jobject obj, jlong offset))
   UnsafeWrapper("Unsafe_GetObject");
   GET_OOP_FIELD(obj, offset, v)
-  jobject ret = JNIHandles::make_local(env, v);
-#if INCLUDE_ALL_GCS
-  // We could be accessing the referent field in a reference
-  // object. If G1 is enabled then we need to register non-null
-  // referent with the SATB barrier.
-  if (UseG1GC || UseShenandoahGC) {
-    bool needs_barrier = false;
 
-    if (ret != NULL) {
-      if (offset == java_lang_ref_Reference::referent_offset && obj != NULL) {
-        oop o = JNIHandles::resolve(obj);
-        Klass* k = o->klass();
-        if (InstanceKlass::cast(k)->reference_type() != REF_NONE) {
-          assert(InstanceKlass::cast(k)->is_subclass_of(SystemDictionary::Reference_klass()), "sanity");
-          needs_barrier = true;
-        }
-      }
-    }
+  ensure_satb_referent_alive(p, offset, v);
 
-    if (needs_barrier) {
-      oop referent = JNIHandles::resolve(ret);
-      G1SATBCardTableModRefBS::enqueue(referent);
-    }
-  }
-#endif // INCLUDE_ALL_GCS
-  return ret;
+  return JNIHandles::make_local(env, v);
 UNSAFE_END
 
 UNSAFE_ENTRY(void, Unsafe_SetObject(JNIEnv *env, jobject unsafe, jobject obj, jlong offset, jobject x_h))
@@ -318,6 +299,9 @@ UNSAFE_ENTRY(jobject, Unsafe_GetObjectVolatile(JNIEnv *env, jobject unsafe, jobj
   } else {
     (void)const_cast<oop&>(v = *(volatile oop*) addr);
   }
+
+  ensure_satb_referent_alive(p, offset, v);
+
   OrderAccess::acquire();
   return JNIHandles::make_local(env, v);
 UNSAFE_END
@@ -1088,7 +1072,7 @@ Unsafe_DefineAnonymousClass_impl(JNIEnv *env,
   (*temp_alloc) = body;
 
   {
-    jbyte* array_base = typeArrayOop(oopDesc::bs()->read_barrier(JNIHandles::resolve_non_null(data)))->byte_at_addr(0);
+    jbyte* array_base = typeArrayOop(JNIHandles::resolve_non_null(data))->byte_at_addr(0);
     Copy::conjoint_words((HeapWord*) array_base, body, word_length);
   }
 
@@ -1237,14 +1221,17 @@ UNSAFE_ENTRY(jboolean, Unsafe_CompareAndSwapObject(JNIEnv *env, jobject unsafe, 
 
   HeapWord* addr = (HeapWord *)index_oop_from_field_offset_long(p, offset);
   jboolean success;
-  if (UseShenandoahGC) {
+#if INCLUDE_ALL_GCS
+  if (UseShenandoahGC && ShenandoahCASBarrier) {
     oop expected;
     do {
       expected = e;
       e = oopDesc::atomic_compare_exchange_oop(x, addr, expected, true);
       success  = oopDesc::unsafe_equals(e, expected);
     } while ((! success) && oopDesc::unsafe_equals(oopDesc::bs()->read_barrier(e), oopDesc::bs()->read_barrier(expected)));
-  } else {
+  } else
+#endif
+  {
     success = oopDesc::unsafe_equals(e, oopDesc::atomic_compare_exchange_oop(x, addr, e, true));
   }
   if (! success) {

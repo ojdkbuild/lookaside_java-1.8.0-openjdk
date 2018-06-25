@@ -36,14 +36,20 @@
                          manageable, \
                          product_rw) \
                                                                             \
-  product(bool, UseShenandoahGC, false,                                     \
-          "Use the Shenandoah garbage collector")                           \
-                                                                            \
-  product(bool, ShenandoahOptimizeFinals, true,                             \
-          "Optimize barriers on final and stable fields/arrays. "           \
+  product(bool, ShenandoahOptimizeStaticFinals, true,                       \
+          "Optimize barriers on static final fields. "                      \
           "Turn it off for maximum compatibility with reflection or JNI "   \
-          "code that manipulates final fields."                             \
-          "Defaults to true. ")                                        \
+          "code that manipulates final fields.")                            \
+                                                                            \
+  product(bool, ShenandoahOptimizeInstanceFinals, false,                    \
+          "Optimize barriers on final instance fields."                     \
+          "Turn it off for maximum compatibility with reflection or JNI "   \
+          "code that manipulates final fields.")                            \
+                                                                            \
+  product(bool, ShenandoahOptimizeStableFinals, false,                      \
+          "Optimize barriers on stable fields."                             \
+          "Turn it off for maximum compatibility with reflection or JNI "   \
+          "code that manipulates final fields.")                            \
                                                                             \
   product(uintx, ShenandoahHeapRegionSize, 0,                               \
           "Size of the Shenandoah regions. "                                \
@@ -60,7 +66,7 @@
           "region, in percents of heap region size. This also caps the "    \
           "maximum TLAB size.")                                             \
                                                                             \
-  experimental(size_t, ShenandoahTargetNumRegions, 2048,                    \
+  experimental(uintx, ShenandoahTargetNumRegions, 2048,                     \
           "Target number of regions. We try to get around that many "       \
           "regions, based on ShenandoahMinRegionSize and "                  \
           "ShenandoahMaxRegionSizeSize. ")                                  \
@@ -71,11 +77,12 @@
   product(ccstr, ShenandoahGCHeuristics, "adaptive",                        \
           "The heuristics to use in Shenandoah GC. Possible values: "       \
           "adaptive (adapt to maintain the given amount of free memory), "  \
-          "dynamic (start concurrent GC based on amount of free memory, "   \
-          "allocation threshold, etc), "                                    \
+          "static (start concurrent GC when static free heap threshold "    \
+          "and static allocation threshold are tripped), "                  \
           "passive (do not start concurrent GC, wait for Full GC) "         \
           "aggressive (run concurrent GC continuously, evacuate everything), " \
-          "Defaults to adaptive")                                            \
+          "compact (run GC with lower footprint target)."                    \
+          "Defaults to adaptive")                                           \
                                                                             \
   experimental(ccstr, ShenandoahUpdateRefsEarly, "adaptive",                \
           "Run a separate concurrent reference updating phase after"        \
@@ -121,9 +128,6 @@
           "Applies to Shenandoah GC dynamic Heuristic mode only "           \
           "(ignored otherwise). Defaults to 10%.")                          \
                                                                             \
-  product_rw(uintx, ShenandoahCSetThreshold, 40,                            \
-          "Set the approximate target percentage of the heap for the"       \
-          "collection set. Defaults to 40%.")                               \
   product_rw(uintx, ShenandoahAllocationThreshold, 0,                       \
           "Set percentage of memory allocated since last GC cycle before "  \
           "a new GC cycle is started. "                                     \
@@ -142,14 +146,10 @@
                "separate update-refs mode. Number is percentage relative "  \
                "to duration(marking)+duration(update-refs).")               \
                                                                             \
-  experimental(double, ShenandoahGCWorkerPerJavaThread, 0.5,                \
-          "Set GC worker to Java thread ratio when "                        \
-          "UseDynamicNumberOfGCThreads is enabled")                         \
-                                                                            \
   experimental(uintx, ShenandoahInitFreeThreshold, 30,                      \
                "Initial remaining free threshold for adaptive heuristics")  \
                                                                             \
-  experimental(uintx, ShenandoahMinFreeThreshold, 3,                        \
+  experimental(uintx, ShenandoahMinFreeThreshold, 10,                       \
                "Minimum remaining free threshold for adaptive heuristics")  \
                                                                             \
   experimental(uintx, ShenandoahMaxFreeThreshold, 70,                       \
@@ -187,6 +187,9 @@
           " 0 - sequential iterator;"                                       \
           " 1 - parallel iterator;"                                         \
           " 2 - parallel iterator with filters;")                           \
+                                                                            \
+  experimental(bool, ShenandoahUncommit, true,                              \
+          "Allow Shenandoah to uncommit unused memory.")                    \
                                                                             \
   experimental(uintx, ShenandoahUncommitDelay, 5*60*1000,                   \
            "Shenandoah would start to uncommit memory for regions that were"\
@@ -228,11 +231,46 @@
   product_rw(bool, ShenandoahRegionSampling, false,                         \
           "Turns on heap region sampling via JVMStat")                      \
                                                                             \
+  experimental(uintx, ShenandoahControlIntervalMin, 1,                      \
+              "The minumum sleep interval for control loop that drives "    \
+              "the cycles. Lower values would increase GC responsiveness "  \
+              "to changing heap conditions, at the expense of higher perf " \
+              "overhead. Time is in milliseconds.")                         \
+                                                                            \
+  experimental(uintx, ShenandoahControlIntervalMax, 10,                     \
+              "The maximum sleep interval for control loop that drives "    \
+              "the cycles. Lower values would increase GC responsiveness "  \
+              "to changing heap conditions, at the expense of higher perf " \
+              "overhead. Time is in milliseconds.")                         \
+                                                                            \
+  experimental(uintx, ShenandoahControlIntervalAdjustPeriod, 1000,          \
+              "The time period for one step in control loop interval "      \
+              "adjustment. Lower values make adjustments faster, at the "   \
+              "expense of higher perf overhead. Time is in milliseconds.")  \
+                                                                            \
+  diagnostic(bool, ShenandoahAllocImplicitLive, true,                       \
+              "Treat (non-evac) allocations implicitely live")              \
+                                                                            \
+  diagnostic(bool, ShenandoahSATBBarrier, true,                             \
+          "Turn on/off SATB barriers in Shenandoah")                        \
+                                                                            \
   diagnostic(bool, ShenandoahWriteBarrier, true,                            \
           "Turn on/off write barriers in Shenandoah")                       \
                                                                             \
+  diagnostic(bool, ShenandoahWriteBarrierRB, true,                          \
+          "Turn on/off RB on WB fastpath in Shenandoah.")                   \
+                                                                            \
   diagnostic(bool, ShenandoahReadBarrier, true,                             \
           "Turn on/off read barriers in Shenandoah")                        \
+                                                                            \
+  diagnostic(bool, ShenandoahCASBarrier, true,                              \
+          "Turn on/off CAS barriers in Shenandoah")                         \
+                                                                            \
+  diagnostic(bool, ShenandoahAcmpBarrier, true,                             \
+          "Turn on/off acmp barriers in Shenandoah")                        \
+                                                                            \
+  diagnostic(bool, ShenandoahCloneBarrier, true,                            \
+          "Turn on/off clone barriers in Shenandoah")                       \
                                                                             \
   diagnostic(bool, ShenandoahStoreCheck, false,                             \
           "Emit additional code that checks objects are written to only"    \
@@ -276,8 +314,8 @@
           "How many objects to prefetch ahead when traversing mark bitmaps." \
           "Set to 0 to disable prefetching.")                               \
                                                                             \
-  experimental(intx, ShenandoahFullGCTries, 3,                              \
-          "How many times to try to do Full GC on allocation failure."      \
+  experimental(intx, ShenandoahAllocGCTries, 5,                             \
+          "How many times to try to do GC on allocation failure."           \
           "Set to 0 to never try, and fail instead.")                       \
                                                                             \
   experimental(bool, ShenandoahFastSyncRoots, true,                         \
@@ -285,6 +323,45 @@
                                                                             \
   experimental(bool, ShenandoahPreclean, true,                              \
               "Do preclean phase before final mark")                        \
+                                                                            \
+  experimental(bool, ShenandoahHumongousMoves, true,                        \
+          "Allow moving humongous regions. This makes GC more resistant "   \
+          "to external fragmentation that may otherwise fail other "        \
+          "humongous allocations, at the expense of higher GC copying "     \
+          "costs.")                                                         \
+                                                                            \
+  diagnostic(bool, ShenandoahOOMDuringEvacALot, false,                      \
+          "Simulate OOM during evacuation frequently.")                     \
+                                                                            \
+  diagnostic(bool, ShenandoahAllocFailureALot, false,                       \
+          "Make lots of artificial allocation failures.")                   \
+                                                                            \
+  diagnostic(bool, ShenandoahDegeneratedGC, true,                           \
+          "Use Degenerated GC.")                                            \
+                                                                            \
+  experimental(bool, ShenandoahPacing, true,                                \
+          "Pace application allocations to give GC chance to start "        \
+          "and complete.")                                                  \
+                                                                            \
+  experimental(uintx, ShenandoahPacingMaxDelay, 10,                         \
+          "Max delay for pacing application allocations. "                  \
+          "Time is in milliseconds.")                                       \
+                                                                            \
+  experimental(uintx, ShenandoahPacingIdleSlack, 2,                         \
+          "Percent of heap counted as non-taxable allocations during idle. "\
+          "Larger value makes the pacing milder during idle phases, "       \
+          "requiring less rendezvous with control thread. Lower value "     \
+          "makes the pacing control less responsive to out-of-cycle allocs.")\
+                                                                            \
+  experimental(uintx, ShenandoahPacingCycleSlack, 10,                       \
+          "Percent of free space taken as non-taxable allocations during "  \
+          "the GC cycle. Larger value makes the pacing milder at the "      \
+          "beginning of the GC cycle. Lower value makes the pacing less "   \
+          "uniform during the cycle.")                                      \
+                                                                            \
+  diagnostic(bool, ShenandoahAllowMixedAllocs, true,                        \
+          "Allow mixing mutator and collector allocations in a single "     \
+          "region")                                                         \
                                                                             \
 
 SHENANDOAH_FLAGS(DECLARE_DEVELOPER_FLAG, \

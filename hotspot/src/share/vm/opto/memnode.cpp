@@ -960,8 +960,8 @@ Node *LoadNode::Identity( PhaseTransform *phase ) {
           (value->in(0)->in(1) != NULL &&
            value->in(0)->in(1)->is_IfProj() &&
            (igvn->_worklist.member(value->in(0)->in(1)) ||
-            value->in(0)->in(1)->in(0) != NULL &&
-            igvn->_worklist.member(value->in(0)->in(1)->in(0))))) {
+            (value->in(0)->in(1)->in(0) != NULL &&
+             igvn->_worklist.member(value->in(0)->in(1)->in(0)))))) {
         igvn->_worklist.push(this);
         return this;
       }
@@ -4229,11 +4229,7 @@ Node *MergeMemNode::Ideal(PhaseGVN *phase, bool can_reshape) {
       // Warning:  Do not combine this "if" with the previous "if"
       // A memory slice might have be be rewritten even if it is semantically
       // unchanged, if the base_memory value has changed.
-      if (can_reshape) {
-        set_req_X(i, new_in, phase->is_IterGVN());
-      } else {
-        set_req(i, new_in);
-      }
+      set_req(i, new_in);
       progress = this;          // Report progress
     }
   }

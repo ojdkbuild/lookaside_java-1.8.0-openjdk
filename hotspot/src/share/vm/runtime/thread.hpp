@@ -272,6 +272,8 @@ class Thread: public ThreadShadow {
   int   _vm_operation_started_count;            // VM_Operation support
   int   _vm_operation_completed_count;          // VM_Operation support
 
+  char _oom_during_evac;
+
   ObjectMonitor* _current_pending_monitor;      // ObjectMonitor this thread
                                                 // is waiting to lock
   bool _current_pending_monitor_is_from_java;   // locking is from Java code
@@ -387,6 +389,14 @@ class Thread: public ThreadShadow {
   void clear_critical_native_unlock() {
     clear_suspend_flag(_critical_native_unlock);
   }
+
+  bool is_oom_during_evac() const;
+  void set_oom_during_evac(bool oom);
+
+#ifdef ASSERT
+  bool is_evac_allowed() const;
+  void set_evac_allowed(bool evac_allowed);
+#endif
 
   // Support for Unhandled Oop detection
 #ifdef CHECK_UNHANDLED_OOPS
@@ -981,8 +991,9 @@ class JavaThread: public Thread {
 
   void flush_barrier_queues();
 
-  bool _evacuation_in_progress;
-  static bool _evacuation_in_progress_global;
+  // Support for Shenandoah barriers
+  static char _gc_state_global;
+  char _gc_state;
 
 #endif // INCLUDE_ALL_GCS
 
@@ -1401,7 +1412,7 @@ class JavaThread: public Thread {
   static ByteSize satb_mark_queue_offset()       { return byte_offset_of(JavaThread, _satb_mark_queue); }
   static ByteSize dirty_card_queue_offset()      { return byte_offset_of(JavaThread, _dirty_card_queue); }
 
-  static ByteSize evacuation_in_progress_offset() { return byte_offset_of(JavaThread, _evacuation_in_progress); }
+  static ByteSize gc_state_offset()              { return byte_offset_of(JavaThread, _gc_state); }
 
 #endif // INCLUDE_ALL_GCS
 
@@ -1702,11 +1713,14 @@ public:
     return _dirty_card_queue_set;
   }
 
-  bool evacuation_in_progress() const;
+  inline char gc_state() const;
 
-  void set_evacuation_in_progress(bool in_prog);
+private:
+  void set_gc_state(char in_prog);
 
-  static void set_evacuation_in_progress_all_threads(bool in_prog);
+public:
+  static void set_gc_state_all_threads(char in_prog);
+
 #endif // INCLUDE_ALL_GCS
 
   // This method initializes the SATB and dirty card queues before a

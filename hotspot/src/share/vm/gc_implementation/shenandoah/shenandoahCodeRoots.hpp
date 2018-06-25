@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Red Hat, Inc. and/or its affiliates.
+ * Copyright (c) 2017, 2018, Red Hat, Inc. and/or its affiliates.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -28,6 +28,7 @@
 #include "code/codeCache.hpp"
 #include "memory/allocation.hpp"
 #include "memory/iterator.hpp"
+#include "gc_implementation/shenandoah/shenandoahSharedVariables.hpp"
 
 class ShenandoahHeap;
 class ShenandoahHeapRegion;
@@ -38,7 +39,7 @@ class ShenandoahCodeRootsIterator VALUE_OBJ_CLASS_SPEC {
 protected:
   ShenandoahHeap* _heap;
   ParallelCodeCacheIterator _par_iterator;
-  volatile jbyte _seq_claimed;
+  ShenandoahSharedFlag _seq_claimed;
   volatile jlong _claimed;
 protected:
   ShenandoahCodeRootsIterator();
@@ -120,7 +121,7 @@ private:
     if (write) {
       OrderAccess::release_store_fence(loc, 0);
     } else {
-      Atomic::add(-1, loc);
+      Atomic::dec(loc);
     }
   }
 };
