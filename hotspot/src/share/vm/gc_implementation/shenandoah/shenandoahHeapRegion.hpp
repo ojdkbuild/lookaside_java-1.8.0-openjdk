@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2015, Red Hat, Inc. and/or its affiliates.
+ * Copyright (c) 2013, 2017, Red Hat, Inc. and/or its affiliates.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -26,7 +26,10 @@
 
 #include "memory/space.hpp"
 
+class VMStructs;
+
 class ShenandoahHeapRegion : public ContiguousSpace {
+  friend class VMStructs;
 private:
   /*
     Region state is described by a state machine. Transitions are guarded by
@@ -34,43 +37,43 @@ private:
     Region states can be logically aggregated in groups.
 
       "Empty":
-      ....................................................
-      .                                                  .
-      .                                                  .
-      .         Uncommitted  <-------  Committed <------------\
-      .              |                     |             .    |
-      .              \---------v-----------/             .    |
-      .                        |                         .    |
-      .........................|..........................    |
-                               |                              |
-      "Active":                |                              |
-      .........................|..........................    |
-      .                        |                         .    |
-      .      /-----------------^------\                  .    |
-      .      |                        |                  .    |
-      .      v                        v    "Humongous":  .    |
-      .   Regular --\-----\      .....O................  .    |
-      .     |  ^    |     |      .    |               .  .    |
-      .     |  |    |     |      .    *---------\     .  .    |
-      .     v  |    |     v      .    v         v     .  .    |
-      .    Pinned   |    CSet    .  H/Start   H/Cont  .  .    |
-      .             |     |      .    v         |     .  .    |
-      .             |     |      .    *<--------/     .  .    |
-      .             |     |      .    |               .  .    |
-      .             |     |      .....O................  .    |
-      .             |     |           |                  .    |
-      .             \-----\---v-------/                  .    |
-      .                       |                          .    |
-      ........................|...........................    |
-                              |                               |
-      "Trash":                |                               |
-      ........................|...........................    |
-      .                       |                          .    |
-      .                       v                          .    |
-      .                     Trash ----------------------------/
-      .                                                  .
-      .                                                  .
-      ....................................................
+      .................................................................
+      .                                                               .
+      .                                                               .
+      .         Uncommitted  <-------  Committed <------------------------\
+      .              |                     |                          .   |
+      .              \---------v-----------/                          .   |
+      .                        |                                      .   |
+      .........................|.......................................   |
+                               |                                          |
+      "Active":                |                                          |
+      .........................|.......................................   |
+      .                        |                                      .   |
+      .      /-----------------^-------------------\                  .   |
+      .      |                                     |                  .   |
+      .      v                                     v    "Humongous":  .   |
+      .   Regular ---\-----\     ..................O................  .   |
+      .     |  ^     |     |     .                 |               .  .   |
+      .     |  |     |     |     .                 *---------\     .  .   |
+      .     v  |     |     |     .                 v         v     .  .   |
+      .    Pinned  Cset    |     .  HStart <--> H/Start   H/Cont   .  .   |
+      .       ^    / |     |     .  Pinned         v         |     .  .   |
+      .       |   /  |     |     .                 *<--------/     .  .   |
+      .       |  v   |     |     .                 |               .  .   |
+      .  CsetPinned  |     |     ..................O................  .   |
+      .              |     |                       |                  .   |
+      .              \-----\---v-------------------/                  .   |
+      .                        |                                      .   |
+      .........................|.......................................   |
+                               |                                          |
+      "Trash":                 |                                          |
+      .........................|.......................................   |
+      .                        |                                      .   |
+      .                        v                                      .   |
+      .                      Trash ---------------------------------------/
+      .                                                               .
+      .                                                               .
+      .................................................................
 
     Transition from "Empty" to "Active" is first allocation. It can go from {Uncommitted, Committed}
     to {Regular, "Humongous"}. The allocation may happen in Regular regions too, but not in Humongous.
@@ -90,45 +93,63 @@ private:
       e) Pinned cannot go CSet, thus it never moves;
       f) Humongous cannot be used for regular allocations;
       g) Humongous cannot go CSet, thus it never moves;
-      h) Humongous cannot go pinned, avoiding useless work;
+      h) Humongous start can go pinned, and thus can be protected from moves (humongous continuations should
+         follow associated humongous starts, not pinnable/movable by themselves);
       i) Empty cannot go Trash, avoiding useless work;
       j) ...
    */
 
   enum RegionState {
-    _empty_uncommitted, // region is empty and has memory uncommitted
-    _empty_committed,   // region is empty and has memory committed
-    _regular,           // region is for regular allocations
-    _humongous_start,   // region is the humongous start
-    _humongous_cont,    // region is the humongous continuation
-    _cset,              // region is in collection set
-    _pinned,            // region is pinned
-    _trash,             // region contains only trash
+    _empty_uncommitted,       // region is empty and has memory uncommitted
+    _empty_committed,         // region is empty and has memory committed
+    _regular,                 // region is for regular allocations
+    _humongous_start,         // region is the humongous start
+    _humongous_cont,          // region is the humongous continuation
+    _pinned_humongous_start,  // region is both humongous start and pinned
+    _cset,                    // region is in collection set
+    _pinned,                  // region is pinned
+    _pinned_cset,             // region is pinned and in cset (evac failure path)
+    _trash,                   // region contains only trash
   };
 
-  const char* region_state_to_string(RegionState s) {
+  const char* region_state_to_string(RegionState s) const {
     switch (s) {
-      case _empty_uncommitted:
-        return "Empty Uncommitted";
-      case _empty_committed:
-        return "Empty Committed";
-      case _regular:
-        return "Regular";
-      case _humongous_start:
-        return "Humongous Start";
-      case _humongous_cont:
-        return "Humongous Continuation";
-      case _cset:
-        return "Collection Set";
-      case _pinned:
-        return "Pinned";
-      case _trash:
-        return "Trash";
+      case _empty_uncommitted:       return "Empty Uncommitted";
+      case _empty_committed:         return "Empty Committed";
+      case _regular:                 return "Regular";
+      case _humongous_start:         return "Humongous Start";
+      case _humongous_cont:          return "Humongous Continuation";
+      case _pinned_humongous_start:  return "Humongous Start, Pinned";
+      case _cset:                    return "Collection Set";
+      case _pinned:                  return "Pinned";
+      case _pinned_cset:             return "Collection Set, Pinned";
+      case _trash:                   return "Trash";
       default:
         ShouldNotReachHere();
         return "";
     }
   }
+
+  // This method protects from accidental changes in enum order:
+  int region_state_to_ordinal(RegionState s) const {
+    switch (s) {
+      case _empty_uncommitted:      return 0;
+      case _empty_committed:        return 1;
+      case _regular:                return 2;
+      case _humongous_start:        return 3;
+      case _humongous_cont:         return 4;
+      case _cset:                   return 5;
+      case _pinned:                 return 6;
+      case _trash:                  return 7;
+      case _pinned_cset:            return 8;
+      case _pinned_humongous_start: return 9;
+      default:
+        ShouldNotReachHere();
+        return -1;
+    }
+  }
+
+  void report_illegal_transition(const char* method);
 
 public:
   // Allowed transitions from the outside code:
@@ -136,47 +157,40 @@ public:
   void make_regular_bypass();
   void make_humongous_start();
   void make_humongous_cont();
+  void make_humongous_start_bypass();
+  void make_humongous_cont_bypass();
   void make_pinned();
   void make_unpinned();
   void make_cset();
   void make_trash();
-  void make_empty_committed();
-  bool make_empty_uncommitted();
+  void make_empty();
+  void make_uncommitted();
+  void make_committed_bypass();
 
   // Individual states:
   bool is_empty_uncommitted()      const { return _state == _empty_uncommitted; }
   bool is_empty_committed()        const { return _state == _empty_committed; }
   bool is_regular()                const { return _state == _regular; }
-  bool is_humongous_start()        const { return _state == _humongous_start; }
   bool is_humongous_continuation() const { return _state == _humongous_cont; }
-  bool is_cset()                   const { return _state == _cset; }
-  bool is_pinned()                 const { return _state == _pinned; }
 
   // Participation in logical groups:
   bool is_empty()                  const { return is_empty_committed() || is_empty_uncommitted(); }
   bool is_active()                 const { return !is_empty() && !is_trash(); }
   bool is_trash()                  const { return _state == _trash; }
-
-  // Macro-properties:
+  bool is_humongous_start()        const { return _state == _humongous_start || _state == _pinned_humongous_start; }
   bool is_humongous()              const { return is_humongous_start() || is_humongous_continuation(); }
   bool is_committed()              const { return !is_empty_uncommitted(); }
-  bool is_alloc_allowed()          const { return is_empty() || is_regular() || is_pinned(); }
+  bool is_cset()                   const { return _state == _cset   || _state == _pinned_cset; }
+  bool is_pinned()                 const { return _state == _pinned || _state == _pinned_cset || _state == _pinned_humongous_start; }
+
+  // Macro-properties:
+  bool is_alloc_allowed()          const { return is_empty() || is_regular() || _state == _pinned; }
+  bool is_move_allowed()           const { return is_regular() || _state == _cset || (ShenandoahHumongousMoves && _state == _humongous_start); }
+
+  RegionState state()              const { return _state; }
+  int  state_ordinal()             const { return region_state_to_ordinal(_state); }
 
 private:
-  void do_commit() {
-    if (!os::commit_memory((char *) _reserved.start(), _reserved.byte_size(), false)) {
-      report_java_out_of_memory("Unable to commit region");
-    }
-    _heap->increase_committed(ShenandoahHeapRegion::region_size_bytes());
-  }
-
-  void do_uncommit() {
-    if (!os::uncommit_memory((char *) _reserved.start(), _reserved.byte_size())) {
-      report_java_out_of_memory("Unable to uncommit region");
-    }
-    _heap->decrease_committed(ShenandoahHeapRegion::region_size_bytes());
-  }
-
   static size_t RegionSizeBytes;
   static size_t RegionSizeWords;
   static size_t RegionSizeBytesShift;
@@ -185,6 +199,7 @@ private:
   static size_t RegionSizeWordsMask;
   static size_t HumongousThresholdBytes;
   static size_t HumongousThresholdWords;
+  static size_t MaxTLABSizeBytes;
 
 private:
   ShenandoahHeap* _heap;
@@ -202,6 +217,8 @@ private:
 
   RegionState _state;
   double _empty_time;
+
+  ShenandoahPacer* _pacer;
 
 public:
   ShenandoahHeapRegion(ShenandoahHeap* heap, HeapWord* start, size_t size_words, size_t index, bool committed);
@@ -272,6 +289,10 @@ public:
     return ShenandoahHeapRegion::HumongousThresholdWords;
   }
 
+  inline static size_t max_tlab_size_bytes() {
+    return ShenandoahHeapRegion::MaxTLABSizeBytes;
+  }
+
   size_t region_number() const;
 
   // Allocation (return NULL if full)
@@ -288,14 +309,12 @@ public:
 
   void clear_live_data();
   void set_live_data(size_t s);
-  inline void increase_live_data_words(size_t s);
-  inline void increase_live_data_words(jint s);
 
-  void reset_alloc_stats_to_shared();
-  void reset_alloc_stats();
-  size_t get_shared_allocs() const;
-  size_t get_tlab_allocs() const;
-  size_t get_gclab_allocs() const;
+  // Increase live data for newly allocated region
+  inline void increase_live_data_alloc_words(size_t s);
+
+  // Increase live data for region scanned with GC
+  inline void increase_live_data_gc_words(size_t s);
 
   bool has_live() const;
   size_t get_live_data_bytes() const;
@@ -308,8 +327,6 @@ public:
   void recycle();
 
   void oop_iterate_skip_unreachable(ExtendedOopClosure* cl, bool skip_unreachable_objects);
-
-  void object_iterate_interruptible(ObjectClosure* blk, bool allow_cancel);
 
   HeapWord* object_iterate_careful(ObjectClosureCareful* cl);
 
@@ -326,6 +343,18 @@ public:
   void set_new_top(HeapWord* new_top) { _new_top = new_top; }
   HeapWord* new_top() const { return _new_top; }
 
+  inline void adjust_alloc_metadata(ShenandoahHeap::AllocType type, size_t);
+  void reset_alloc_metadata_to_shared();
+  void reset_alloc_metadata();
+  size_t get_shared_allocs() const;
+  size_t get_tlab_allocs() const;
+  size_t get_gclab_allocs() const;
+
+private:
+  void do_commit();
+  void do_uncommit();
+
+  inline void internal_increase_live_data(size_t s);
 };
 
 #endif // SHARE_VM_GC_SHENANDOAH_SHENANDOAHHEAPREGION_HPP

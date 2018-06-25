@@ -27,14 +27,19 @@
  * @key gc
  * @modules java.base/jdk.internal.misc
  *          java.management
- * @run main/othervm  -XX:+UseShenandoahGC -Xmx2g -Xms2g
- *                    -XX:+IgnoreUnrecognizedVMOptions
- *                    -XX:+UnlockExperimentalVMOptions
- *                    -XX:+UnlockDiagnosticVMOptions
- *                    -XX:+ShenandoahStoreCheck
- *                    -XX:+ShenandoahVerify
- *                    -XX:+VerifyStrictOopOperations
- *                    -XX:+ShenandoahVerifyOptoBarriers
+ * @run main/othervm  -XX:+UseShenandoahGC -Xmx1g -Xms1g -XX:+IgnoreUnrecognizedVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UnlockDiagnosticVMOptions
+ *                    -XX:+ShenandoahStoreCheck -XX:+ShenandoahVerify -XX:+VerifyStrictOopOperations
+ *                    -XX:ShenandoahGCHeuristics=passive
+ *                    VerifyJCStressTest
+ *
+ * @run main/othervm  -XX:+UseShenandoahGC -Xmx1g -Xms1g -XX:+IgnoreUnrecognizedVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UnlockDiagnosticVMOptions
+ *                    -XX:+ShenandoahStoreCheck -XX:+ShenandoahVerify -XX:+VerifyStrictOopOperations -XX:+ShenandoahVerifyOptoBarriers
+ *                    -XX:ShenandoahGCHeuristics=adaptive
+ *                    VerifyJCStressTest
+ *
+ * @run main/othervm  -XX:+UseShenandoahGC -Xmx1g -Xms1g -XX:+IgnoreUnrecognizedVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UnlockDiagnosticVMOptions
+ *                    -XX:+ShenandoahStoreCheck -XX:+ShenandoahVerify -XX:+VerifyStrictOopOperations -XX:+ShenandoahVerifyOptoBarriers
+ *                    -XX:ShenandoahGCHeuristics=static
  *                    VerifyJCStressTest
  */
 
@@ -54,7 +59,6 @@ public class VerifyJCStressTest {
           }
         );
 
-        List<Future<?>> futures = new ArrayList<>();
         for (int c = 0; c < 10000; c++) {
           final Test[] tests = new Test[10000];
           for (int t = 0; t < tests.length; t++) {
@@ -73,12 +77,8 @@ public class VerifyJCStressTest {
             }
           });
 
-          futures.add(f1);
-          futures.add(f2);
-        }
-
-        for (Future<?> f : futures) {
-          f.get();
+          f1.get();
+          f2.get();
         }
     }
 

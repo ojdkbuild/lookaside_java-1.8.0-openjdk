@@ -831,15 +831,11 @@ void LIR_Assembler::reg2mem(LIR_Opr src, LIR_Opr dest, BasicType type, LIR_Patch
   if (type == T_ARRAY || type == T_OBJECT) {
     __ verify_oop(src->as_register());
 
-    __ shenandoah_store_check(as_Address(to_addr), src->as_register());
-
     if (UseCompressedOops && !wide) {
       __ encode_heap_oop(compressed_src, src->as_register());
     } else {
       compressed_src = src->as_register();
     }
-  } else {
-    __ shenandoah_store_addr_check(to_addr->base()->as_pointer_register());
   }
 
   int null_check_here = code_offset();
@@ -974,7 +970,6 @@ void LIR_Assembler::stack2stack(LIR_Opr src, LIR_Opr dest, BasicType type) {
   reg2stack(temp, dest, dest->type(), false);
 }
 
-
 void LIR_Assembler::mem2reg(LIR_Opr src, LIR_Opr dest, BasicType type, LIR_PatchCode patch_code, CodeEmitInfo* info, bool wide, bool /* unaligned */) {
   LIR_Address* addr = src->as_address_ptr();
   LIR_Address* from_addr = src->as_address_ptr();
@@ -1073,7 +1068,6 @@ void LIR_Assembler::mem2reg(LIR_Opr src, LIR_Opr dest, BasicType type, LIR_Patch
   }
 }
 
-
 void LIR_Assembler::prefetchr(LIR_Opr src) { Unimplemented(); }
 
 
@@ -1160,7 +1154,7 @@ void LIR_Assembler::emit_opBranch(LIR_OpBranch* op) {
   }
 }
 
-
+#if INCLUDE_ALL_GCS
 void LIR_Assembler::emit_opShenandoahWriteBarrier(LIR_OpShenandoahWriteBarrier* op) {
 
   Register obj = op->in_opr()->as_register();
@@ -1185,7 +1179,7 @@ void LIR_Assembler::emit_opShenandoahWriteBarrier(LIR_OpShenandoahWriteBarrier* 
   __ block_comment("} Shenandoah write barrier");
 
 }
-
+#endif
  
 void LIR_Assembler::emit_opConvert(LIR_OpConvert* op) {
   LIR_Opr src  = op->in_opr();
@@ -1696,7 +1690,8 @@ void LIR_Assembler::emit_compare_and_swap(LIR_OpCompareAndSwap* op) {
     assert(op->tmp1()->is_valid(), "must be");
     Register t1 = op->tmp1()->as_register();
     if (UseCompressedOops) {
-      if (UseShenandoahGC) {
+#if INCLUDE_ALL_GCS
+      if (UseShenandoahGC && ShenandoahCASBarrier) {
         __ encode_heap_oop(t1, cmpval);
         cmpval = t1;
         assert(op->tmp2()->is_valid(), "must be");
@@ -1705,7 +1700,9 @@ void LIR_Assembler::emit_compare_and_swap(LIR_OpCompareAndSwap* op) {
         newval = t2;
         __ cmpxchg_oop_shenandoah(addr, cmpval, newval, Assembler::word, /*acquire*/ false, /*release*/ true, /*weak*/ false);
         __ csetw(res, Assembler::EQ);
-      } else {
+      } else
+#endif
+      {
         __ encode_heap_oop(t1, cmpval);
         cmpval = t1;
         __ encode_heap_oop(rscratch2, newval);
@@ -1714,10 +1711,13 @@ void LIR_Assembler::emit_compare_and_swap(LIR_OpCompareAndSwap* op) {
         __ eorw (res, r8, 1);
       }
     } else {
-      if (UseShenandoahGC) {
+#if INCLUDE_ALL_GCS
+      if (UseShenandoahGC && ShenandoahCASBarrier) {
         __ cmpxchg_oop_shenandoah(addr, cmpval, newval, Assembler::xword, /*acquire*/ false, /*release*/ true, /*weak*/ false);
         __ csetw(res, Assembler::EQ);
-      } else {
+      } else
+#endif
+      {
         casl(addr, newval, cmpval);
         __ eorw (res, r8, 1);
       }

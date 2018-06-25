@@ -26,32 +26,20 @@
 
 #include "gc_implementation/shenandoah/shenandoahHeap.hpp"
 #include "gc_implementation/shenandoah/shenandoahHeapRegion.hpp"
+#include "gc_implementation/shenandoah/shenandoahPacer.inline.hpp"
 #include "runtime/atomic.hpp"
 
 HeapWord* ShenandoahHeapRegion::allocate(size_t size, ShenandoahHeap::AllocType type) {
-  ShenandoahHeap::heap()->assert_heaplock_or_safepoint();
+  _heap->assert_heaplock_or_safepoint();
 
   HeapWord* obj = top();
   if (pointer_delta(end(), obj) >= size) {
     make_regular_allocation();
+    adjust_alloc_metadata(type, size);
+
     HeapWord* new_top = obj + size;
     set_top(new_top);
     assert(is_aligned(obj) && is_aligned(new_top), "checking alignment");
-
-    switch (type) {
-      case ShenandoahHeap::_alloc_shared:
-      case ShenandoahHeap::_alloc_shared_gc:
-        _shared_allocs += size;
-        break;
-      case ShenandoahHeap::_alloc_tlab:
-        _tlab_allocs += size;
-        break;
-      case ShenandoahHeap::_alloc_gclab:
-        _gclab_allocs += size;
-        break;
-      default:
-        ShouldNotReachHere();
-    }
 
     return obj;
   } else {
@@ -59,17 +47,44 @@ HeapWord* ShenandoahHeapRegion::allocate(size_t size, ShenandoahHeap::AllocType 
   }
 }
 
-inline void ShenandoahHeapRegion::increase_live_data_words(size_t s) {
-  assert (s <= (size_t)max_jint, "sanity");
-  increase_live_data_words((jint)s);
+inline void ShenandoahHeapRegion::adjust_alloc_metadata(ShenandoahHeap::AllocType type, size_t size) {
+  switch (type) {
+    case ShenandoahHeap::_alloc_shared:
+    case ShenandoahHeap::_alloc_shared_gc:
+      _shared_allocs += size;
+      break;
+    case ShenandoahHeap::_alloc_tlab:
+      _tlab_allocs += size;
+      break;
+    case ShenandoahHeap::_alloc_gclab:
+      _gclab_allocs += size;
+      break;
+    default:
+      ShouldNotReachHere();
+  }
 }
 
-inline void ShenandoahHeapRegion::increase_live_data_words(jint s) {
-  jint new_live_data = Atomic::add(s, &_live_data);
+inline void ShenandoahHeapRegion::increase_live_data_alloc_words(size_t s) {
+  if (!ShenandoahAllocImplicitLive) {
+    return;
+  }
+  internal_increase_live_data(s);
+}
+
+inline void ShenandoahHeapRegion::increase_live_data_gc_words(size_t s) {
+  internal_increase_live_data(s);
+  if (ShenandoahPacing) {
+    _pacer->report_mark(s);
+  }
+}
+
+inline void ShenandoahHeapRegion::internal_increase_live_data(size_t s) {
+  assert(s < (size_t)max_jint, "sanity");
+  size_t new_live_data = (size_t)(Atomic::add((jint)s, &_live_data));
 #ifdef ASSERT
-  size_t live_bytes = (size_t)(new_live_data * HeapWordSize);
+  size_t live_bytes = new_live_data * HeapWordSize;
   size_t used_bytes = used();
-  assert(live_bytes <= used_bytes || is_humongous(),
+  assert(live_bytes <= used_bytes,
          err_msg("can't have more live data than used: " SIZE_FORMAT ", " SIZE_FORMAT, live_bytes, used_bytes));
 #endif
 }

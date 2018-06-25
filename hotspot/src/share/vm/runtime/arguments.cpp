@@ -64,6 +64,7 @@
 #include "gc_implementation/g1/g1CollectedHeap.inline.hpp"
 #include "gc_implementation/parallelScavenge/parallelScavengeHeap.hpp"
 #include "gc_implementation/shenandoah/shenandoahHeap.hpp"
+#include "gc_implementation/shenandoah/shenandoahLogging.hpp"
 #endif // INCLUDE_ALL_GCS
 
 // Note: This is a special bug reporting site for the JVM
@@ -1720,10 +1721,28 @@ void Arguments::set_g1_gc_flags() {
 
 void Arguments::set_shenandoah_gc_flags() {
 
-#if !(defined AARCH64 || defined AMD64)
+#if !(defined AARCH64 || defined AMD64 || defined IA32)
   UNSUPPORTED_GC_OPTION(UseShenandoahGC);
 #endif
 
+#ifdef IA32
+  warning("Shenandoah GC is not fully supported on this platform:");
+  warning("  concurrent modes are not supported, only STW cycles are enabled;");
+  warning("  arch-specific barrier code is not implemented, disabling barriers;");
+
+#if INCLUDE_ALL_GCS
+  FLAG_SET_DEFAULT(ShenandoahGCHeuristics,           "passive");
+
+  FLAG_SET_DEFAULT(ShenandoahSATBBarrier,            false);
+  FLAG_SET_DEFAULT(ShenandoahWriteBarrier,           false);
+  FLAG_SET_DEFAULT(ShenandoahReadBarrier,            false);
+  FLAG_SET_DEFAULT(ShenandoahCASBarrier,             false);
+  FLAG_SET_DEFAULT(ShenandoahAcmpBarrier,            false);
+  FLAG_SET_DEFAULT(ShenandoahCloneBarrier,           false);
+#endif
+#endif
+
+#if INCLUDE_ALL_GCS
   if (!FLAG_IS_DEFAULT(ShenandoahGarbageThreshold)) {
     if (0 > ShenandoahGarbageThreshold || ShenandoahGarbageThreshold > 100) {
       vm_exit_during_initialization("The flag -XX:ShenandoahGarbageThreshold is out of range", NULL);
@@ -1741,6 +1760,7 @@ void Arguments::set_shenandoah_gc_flags() {
       vm_exit_during_initialization("The flag -XX:ShenandoahFreeThreshold is out of range", NULL);
     }
   }
+#endif
 
 #ifdef _LP64
   // The optimized ObjArrayChunkedTask takes some bits away from the full 64 addressable
@@ -1765,9 +1785,13 @@ void Arguments::set_shenandoah_gc_flags() {
     FLAG_SET_DEFAULT(ParallelRefProcEnabled, true);
   }
 
-  if (FLAG_IS_DEFAULT(PerfDataMemorySize)) {
-    FLAG_SET_DEFAULT(PerfDataMemorySize, 512*K);
+#if INCLUDE_ALL_GCS
+  if (ShenandoahRegionSampling && FLAG_IS_DEFAULT(PerfDataMemorySize)) {
+    // When sampling is enabled, max out the PerfData memory to get more
+    // Shenandoah data in, including Matrix.
+    FLAG_SET_DEFAULT(PerfDataMemorySize, 2048*K);
   }
+#endif
 
 #ifdef COMPILER2
   // Shenandoah cares more about pause times, rather than raw throughput.
@@ -1776,8 +1800,26 @@ void Arguments::set_shenandoah_gc_flags() {
   if (FLAG_IS_DEFAULT(UseCountedLoopSafepoints)) {
     FLAG_SET_DEFAULT(UseCountedLoopSafepoints, true);
   }
-#endif
 
+#ifdef ASSERT
+  // C2 barrier verification is only reliable when all default barriers are enabled
+  if (ShenandoahVerifyOptoBarriers &&
+          (!FLAG_IS_DEFAULT(ShenandoahSATBBarrier)    ||
+           !FLAG_IS_DEFAULT(ShenandoahReadBarrier)    ||
+           !FLAG_IS_DEFAULT(ShenandoahWriteBarrier)   ||
+           !FLAG_IS_DEFAULT(ShenandoahCASBarrier)     ||
+           !FLAG_IS_DEFAULT(ShenandoahAcmpBarrier)    ||
+           !FLAG_IS_DEFAULT(ShenandoahCloneBarrier)
+          )) {
+    warning("Unusual barrier configuration, disabling C2 barrier verification");
+    FLAG_SET_DEFAULT(ShenandoahVerifyOptoBarriers, false);
+  }
+#else
+  guarantee(!ShenandoahVerifyOptoBarriers, "Should be disabled");
+#endif // ASSERT
+#endif // COMPILER2
+
+#if INCLUDE_ALL_GCS
   if (AlwaysPreTouch) {
     // Shenandoah handles pre-touch on its own. It does not let the
     // generic storage code to do the pre-touch before Shenandoah has
@@ -1785,6 +1827,14 @@ void Arguments::set_shenandoah_gc_flags() {
     FLAG_SET_DEFAULT(AlwaysPreTouch, false);
     FLAG_SET_DEFAULT(ShenandoahAlwaysPreTouch, true);
   }
+
+  if (ShenandoahAlwaysPreTouch) {
+    if (!FLAG_IS_DEFAULT(ShenandoahUncommit)) {
+      warning("AlwaysPreTouch is enabled, disabling ShenandoahUncommit");
+    }
+    FLAG_SET_DEFAULT(ShenandoahUncommit, false);
+  }
+#endif
 }
 
 #if !INCLUDE_ALL_GCS
@@ -2102,6 +2152,12 @@ void check_gclog_consistency() {
                 "GCLogFileSize changed to minimum 8K\n");
   }
 
+  // Record more information about previous cycles for improved debugging pleasure
+  if (FLAG_IS_DEFAULT(LogEventsBufferEntries)) {
+    FLAG_SET_DEFAULT(LogEventsBufferEntries, 250);
+  }
+
+#if INCLUDE_ALL_GCS
   if (ShenandoahConcurrentEvacCodeRoots) {
     if (!ShenandoahBarriersForConst) {
       if (FLAG_IS_DEFAULT(ShenandoahBarriersForConst)) {
@@ -2127,14 +2183,7 @@ void check_gclog_consistency() {
     }
     FLAG_SET_DEFAULT(ShenandoahUncommitDelay, max_uintx);
   }
-
-  // Current Hotspot machinery for biased locking may introduce lots of latency hiccups
-  // that negate the benefits of low-latency GC. The throughput improvements granted by
-  // biased locking on modern hardware are not covering the latency problems induced by
-  // it. Therefore, unless user really wants it, disable biased locking.
-  if (FLAG_IS_DEFAULT(UseBiasedLocking)) {
-    FLAG_SET_DEFAULT(UseBiasedLocking, false);
-  }
+#endif
 }
 
 // This function is called for -Xloggc:<filename>, it can be used

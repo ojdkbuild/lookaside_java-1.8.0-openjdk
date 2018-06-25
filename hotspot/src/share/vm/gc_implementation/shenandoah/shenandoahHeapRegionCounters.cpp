@@ -79,7 +79,7 @@ void ShenandoahHeapRegionCounters::update() {
 
       ShenandoahHeap* heap = ShenandoahHeap::heap();
       jlong status = 0;
-      if (heap->concurrent_mark_in_progress()) status |= 1 << 0;
+      if (heap->is_concurrent_mark_in_progress()) status |= 1 << 0;
       if (heap->is_evacuation_in_progress())   status |= 1 << 1;
       if (heap->is_update_refs_in_progress())  status |= 1 << 2;
       _status->set_value(status);
@@ -87,27 +87,20 @@ void ShenandoahHeapRegionCounters::update() {
       _timestamp->set_value(os::elapsed_counter());
 
       size_t num_regions = heap->num_regions();
-      ShenandoahHeapRegionSet* regions = heap->regions();
-      size_t rs = ShenandoahHeapRegion::region_size_bytes();
-      for (uint i = 0; i < num_regions; i++) {
-        if (i < num_regions) {
-          ShenandoahHeapRegion* r = regions->get(i);
+
+      {
+        ShenandoahHeapLocker locker(heap->lock());
+        size_t rs = ShenandoahHeapRegion::region_size_bytes();
+        for (uint i = 0; i < num_regions; i++) {
+          ShenandoahHeapRegion* r = heap->get_region(i);
           jlong data = 0;
           data |= ((100 * r->used() / rs)                & PERCENT_MASK) << USED_SHIFT;
           data |= ((100 * r->get_live_data_bytes() / rs) & PERCENT_MASK) << LIVE_SHIFT;
-          data |= ((100 * r->get_tlab_allocs()  / rs)    & PERCENT_MASK) << TLAB_SHIFT;
+          data |= ((100 * r->get_tlab_allocs() / rs)     & PERCENT_MASK) << TLAB_SHIFT;
           data |= ((100 * r->get_gclab_allocs() / rs)    & PERCENT_MASK) << GCLAB_SHIFT;
           data |= ((100 * r->get_shared_allocs() / rs)   & PERCENT_MASK) << SHARED_SHIFT;
-          jlong flags = 0;
-          if (r->in_collection_set())     flags |= 1 << 1;
-          if (r->is_humongous())          flags |= 1 << 2;
-          if (r->is_pinned())             flags |= 1 << 3;
-          data |= (flags & FLAGS_MASK) << FLAGS_SHIFT;
+          data |= (r->state_ordinal() & STATUS_MASK) << STATUS_SHIFT;
           _regions_data[i]->set_value(data);
-        } else {
-          jlong flags = 1 << 0;
-          flags = (flags & FLAGS_MASK) << FLAGS_SHIFT;
-          _regions_data[i]->set_value(flags);
         }
       }
     }

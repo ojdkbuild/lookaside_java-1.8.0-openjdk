@@ -179,12 +179,12 @@ ciConstantPoolCache* ciInstanceKlass::field_cache() {
 //
 ciInstanceKlass* ciInstanceKlass::get_canonical_holder(int offset) {
   #ifdef ASSERT
-  if (!(offset >= 0 && offset < layout_helper() || (offset == BrooksPointer::byte_offset() && UseShenandoahGC))) {
+  if (!((offset >= 0 && offset < layout_helper()) || (UseShenandoahGC && offset == BrooksPointer::byte_offset()))) {
     tty->print("*** get_canonical_holder(%d) on ", offset);
     this->print();
     tty->print_cr(" ***");
-  };
-  assert(offset >= 0 && offset < layout_helper() || (offset == BrooksPointer::byte_offset() && UseShenandoahGC), "offset must be tame");
+    fatal("offset must be tame");
+  }
   #endif
 
   if (offset < instanceOopDesc::base_offset_in_bytes()) {
@@ -718,12 +718,23 @@ void ciInstanceKlass::dump_replay_data(outputStream* out) {
 }
 
 #ifdef ASSERT
-bool ciInstanceKlass::debug_final_or_stable_field_at(int offset) {
+bool ciInstanceKlass::debug_final_field_at(int offset) {
   GUARDED_VM_ENTRY(
     InstanceKlass* ik = get_instanceKlass();
     fieldDescriptor fd;
     if (ik->find_field_from_offset(offset, false, &fd)) {
-      return fd.is_final() || fd.is_stable();
+      return fd.is_final();
+    }
+  );
+  return false;
+}
+
+bool ciInstanceKlass::debug_stable_field_at(int offset) {
+  GUARDED_VM_ENTRY(
+    InstanceKlass* ik = get_instanceKlass();
+    fieldDescriptor fd;
+    if (ik->find_field_from_offset(offset, false, &fd)) {
+      return fd.is_stable();
     }
   );
   return false;

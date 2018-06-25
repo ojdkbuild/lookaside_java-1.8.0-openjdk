@@ -25,7 +25,7 @@
 #define SHARE_VM_GC_SHENANDOAH_BROOKSPOINTER_INLINE_HPP
 
 #include "gc_implementation/shenandoah/brooksPointer.hpp"
-#include "gc_implementation/shenandoah/shenandoahVerifier.hpp"
+#include "gc_implementation/shenandoah/shenandoahAsserts.hpp"
 #include "gc_implementation/shenandoah/shenandoahHeap.hpp"
 #include "gc_implementation/shenandoah/shenandoahHeapRegion.hpp"
 #include "gc_implementation/shenandoah/shenandoahLogging.hpp"
@@ -36,41 +36,32 @@ inline HeapWord** BrooksPointer::brooks_ptr_addr(oop obj) {
 }
 
 inline void BrooksPointer::initialize(oop obj) {
-#ifdef ASSERT
-  assert(ShenandoahHeap::heap()->is_in(obj), "oop must point to a heap address");
-#endif
+  shenandoah_assert_in_heap(NULL, obj);
   *brooks_ptr_addr(obj) = (HeapWord*) obj;
 }
 
-inline void BrooksPointer::set_raw(oop holder, HeapWord* update) {
-  assert(UseShenandoahGC, "must only be called when Shenandoah is used.");
-  *brooks_ptr_addr(holder) = update;
+inline void BrooksPointer::set_raw(oop obj, HeapWord* update) {
+  shenandoah_assert_in_heap(NULL, obj);
+  *brooks_ptr_addr(obj) = update;
 }
 
-inline HeapWord* BrooksPointer::get_raw(oop holder) {
-  assert(UseShenandoahGC, "must only be called when Shenandoah is used.");
-  return *brooks_ptr_addr(holder);
+inline HeapWord* BrooksPointer::get_raw(oop obj) {
+  shenandoah_assert_in_heap(NULL, obj);
+  return *brooks_ptr_addr(obj);
+}
+
+inline HeapWord* BrooksPointer::get_raw_unchecked(oop obj) {
+  return *brooks_ptr_addr(obj);
 }
 
 inline oop BrooksPointer::forwardee(oop obj) {
-#ifdef ASSERT
-  ShenandoahVerifier::verify_oop(obj);
-#endif
+  shenandoah_assert_correct(NULL, obj);
   return oop(*brooks_ptr_addr(obj));
 }
 
-inline oop BrooksPointer::try_update_forwardee(oop holder, oop update) {
-#ifdef ASSERT
-  ShenandoahVerifier::verify_oop_fwdptr(holder, update);
-#endif
-
-  oop result = (oop) Atomic::cmpxchg_ptr(update, brooks_ptr_addr(holder), holder);
-
-#ifdef ASSERT
-  assert(result != NULL, "CAS result is not NULL");
-  ShenandoahVerifier::verify_oop(holder);
-#endif
-
+inline oop BrooksPointer::try_update_forwardee(oop obj, oop update) {
+  oop result = (oop) Atomic::cmpxchg_ptr(update, brooks_ptr_addr(obj), obj);
+  shenandoah_assert_correct_except(NULL, obj, !oopDesc::unsafe_equals(result, obj));
   return result;
 }
 

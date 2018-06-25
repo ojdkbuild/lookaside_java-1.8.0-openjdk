@@ -24,39 +24,39 @@
 #ifndef SHARE_VM_GC_SHENANDOAHUTILS_HPP
 #define SHARE_VM_GC_SHENANDOAHUTILS_HPP
 
+#include "runtime/vmThread.hpp"
 #include "gc_implementation/shared/isGCActiveMark.hpp"
 #include "gc_implementation/shared/vmGCOperations.hpp"
 #include "memory/allocation.hpp"
-#include "gc_implementation/shenandoah/shenandoahCollectorPolicy.hpp"
+#include "gc_implementation/shenandoah/shenandoahPhaseTimings.hpp"
 
 class GCTimer;
 
 class ShenandoahGCSession : public StackObj {
 private:
   GCTimer*  _timer;
-
+  TraceMemoryManagerStats _trace_cycle;
 public:
-  ShenandoahGCSession(bool is_full_gc = false);
+  ShenandoahGCSession();
   ~ShenandoahGCSession();
 };
 
 class ShenandoahGCPhase : public StackObj {
 private:
-  const ShenandoahCollectorPolicy::TimingPhase   _phase;
+  const ShenandoahPhaseTimings::Phase   _phase;
 public:
-  ShenandoahGCPhase(ShenandoahCollectorPolicy::TimingPhase phase);
+  ShenandoahGCPhase(ShenandoahPhaseTimings::Phase phase);
   ~ShenandoahGCPhase();
 };
 
 // Aggregates all the things that should happen before/after the pause.
 class ShenandoahGCPauseMark : public StackObj {
 private:
-  const ShenandoahGCPhase _phase_total;
-  const ShenandoahGCPhase _phase_this;
   const SvcGCMarker       _svc_gc_mark;
   const IsGCActiveMark    _is_gc_active_mark;
+  TraceMemoryManagerStats _trace_pause;
 public:
-  ShenandoahGCPauseMark(ShenandoahCollectorPolicy::TimingPhase phase, SvcGCMarker::reason_type type);
+  ShenandoahGCPauseMark(SvcGCMarker::reason_type type);
   ~ShenandoahGCPauseMark();
 };
 
@@ -68,6 +68,26 @@ private:
 public:
   ShenandoahAllocTrace(size_t words_size, ShenandoahHeap::AllocType alloc_type);
   ~ShenandoahAllocTrace();
+};
+
+class ShenandoahSafepoint : public AllStatic {
+public:
+  // check if Shenandoah GC safepoint is in progress
+  static inline bool is_at_shenandoah_safepoint() {
+    if (!SafepointSynchronize::is_at_safepoint()) return false;
+
+    VM_Operation* vm_op = VMThread::vm_operation();
+    if (vm_op == NULL) return false;
+
+    VM_Operation::VMOp_Type type = vm_op->type();
+    return type == VM_Operation::VMOp_ShenandoahInitMark ||
+           type == VM_Operation::VMOp_ShenandoahFinalMarkStartEvac ||
+           type == VM_Operation::VMOp_ShenandoahFinalEvac ||
+           type == VM_Operation::VMOp_ShenandoahInitUpdateRefs ||
+           type == VM_Operation::VMOp_ShenandoahFinalUpdateRefs ||
+           type == VM_Operation::VMOp_ShenandoahFullGC ||
+           type == VM_Operation::VMOp_ShenandoahDegeneratedGC;
+  }
 };
 
 #endif // SHARE_VM_GC_SHENANDOAHUTILS_HPP

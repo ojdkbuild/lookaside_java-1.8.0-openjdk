@@ -305,7 +305,20 @@ void ReferenceProcessor::process_phaseJNI(BoolObjectClosure* is_alive,
     gclog_or_tty->print(", %u refs", count);
   }
 #endif
-  JNIHandles::weak_oops_do(is_alive, keep_alive);
+  if (UseShenandoahGC) {
+    // Workaround bugs with JNI weak reference processing, by pessimistically
+    // assuming all JNI weak refs are alive. This effectively makes JNI weak refs
+    // non-reclaimable. // TODO: Fix this properly
+    class AlwaysAliveClosure: public BoolObjectClosure {
+    public:
+      virtual bool do_object_b(oop obj) { return true; }
+    };
+
+    AlwaysAliveClosure always_alive;
+    JNIHandles::weak_oops_do(&always_alive, keep_alive);
+  } else {
+    JNIHandles::weak_oops_do(is_alive, keep_alive);
+  }
   complete_gc->do_void();
 }
 
@@ -1144,6 +1157,7 @@ bool ReferenceProcessor::discover_reference(oop obj, ReferenceType rt) {
   if (!_discovering_refs || !RegisterReferences) {
     return false;
   }
+  DEBUG_ONLY(oopDesc::bs()->verify_safe_oop(obj);)
   // We only discover active references.
   oop next = java_lang_ref_Reference::next(obj);
   if (next != NULL) {   // Ref is no longer active

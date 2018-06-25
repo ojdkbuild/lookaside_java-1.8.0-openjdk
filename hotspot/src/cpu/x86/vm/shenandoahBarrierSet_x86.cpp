@@ -60,14 +60,13 @@ void ShenandoahBarrierSet::interpreter_write_barrier(MacroAssembler* masm, Regis
 
   Label done;
 
-  Address evacuation_in_progress = Address(r15_thread, in_bytes(JavaThread::evacuation_in_progress_offset()));
-
-  __ cmpb(evacuation_in_progress, 0);
+  Address gc_state(r15_thread, in_bytes(JavaThread::gc_state_offset()));
+  __ testb(gc_state, ShenandoahHeap::EVACUATION);
 
   // Now check if evacuation is in progress.
   interpreter_read_barrier_not_null(masm, dst);
 
-  __ jcc(Assembler::equal, done);
+  __ jcc(Assembler::zero, done);
   __ push(rscratch1);
   __ push(rscratch2);
 
@@ -140,12 +139,15 @@ void ShenandoahBarrierSet::interpreter_write_barrier(MacroAssembler* masm, Regis
 }
 
 void ShenandoahBarrierSet::asm_acmp_barrier(MacroAssembler* masm, Register op1, Register op2) {
-  Label done;
-  __ jccb(Assembler::equal, done);
-  interpreter_read_barrier(masm, op1);
-  interpreter_read_barrier(masm, op2);
-  __ cmpptr(op1, op2);
-  __ bind(done);
+  assert (UseShenandoahGC, "Should be enabled");
+  if (ShenandoahAcmpBarrier) {
+    Label done;
+    __ jccb(Assembler::equal, done);
+    interpreter_read_barrier(masm, op1);
+    interpreter_read_barrier(masm, op2);
+    __ cmpptr(op1, op2);
+    __ bind(done);
+  }
 }
 
 void ShenandoahHeap::compile_prepare_oop(MacroAssembler* masm, Register obj) {

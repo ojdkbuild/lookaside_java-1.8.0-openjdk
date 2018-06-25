@@ -46,7 +46,6 @@ void ShenandoahBarrierSet::interpreter_read_barrier_not_null(MacroAssembler* mas
 }
 
 void ShenandoahBarrierSet::interpreter_write_barrier(MacroAssembler* masm, Register dst) {
-
   if (! ShenandoahWriteBarrier) {
     return interpreter_read_barrier(masm, dst);
   }
@@ -56,16 +55,14 @@ void ShenandoahBarrierSet::interpreter_write_barrier(MacroAssembler* masm, Regis
 
   Label done;
 
-  Address evacuation_in_progress
-    = Address(rthread, in_bytes(JavaThread::evacuation_in_progress_offset()));
-
-  __ ldrb(rscratch2, evacuation_in_progress);
+  Address gc_state(rthread, in_bytes(JavaThread::gc_state_offset()));
+  __ ldrb(rscratch1, gc_state);
   __ membar(Assembler::LoadLoad);
 
   // Now check if evacuation is in progress.
   interpreter_read_barrier_not_null(masm, dst);
 
-  __ cbzw(rscratch2, done);
+  __ tbz(rscratch1, ShenandoahHeap::EVACUATION_BITPOS, done);
 
   __ lsr(rscratch1, dst, ShenandoahHeapRegion::region_size_bytes_shift_jint());
   __ mov(rscratch2,  ShenandoahHeap::in_cset_fast_test_addr());
@@ -98,15 +95,18 @@ void ShenandoahHeap::compile_prepare_oop(MacroAssembler* masm, Register obj) {
 
 void ShenandoahBarrierSet::asm_acmp_barrier(MacroAssembler* masm,
                                             Register op1, Register op2) {
-  Label done;
-  __ br(Assembler::EQ, done);
-  // The object may have been evacuated, but we won't see it without a
-  // membar here.
-  __ membar(Assembler::LoadStore|Assembler::LoadLoad);
-  interpreter_read_barrier(masm, op1);
-  interpreter_read_barrier(masm, op2);
-  __ cmp(op1, op2);
-  __ bind(done);
+  assert(UseShenandoahGC, "Should be enabled");
+  if (ShenandoahAcmpBarrier) {
+    Label done;
+    __ br(Assembler::EQ, done);
+    // The object may have been evacuated, but we won't see it without a
+    // membar here.
+    __ membar(Assembler::LoadStore|Assembler::LoadLoad);
+    interpreter_read_barrier(masm, op1);
+    interpreter_read_barrier(masm, op2);
+    __ cmp(op1, op2);
+    __ bind(done);
+  }
 }
 
 #endif

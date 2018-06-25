@@ -896,7 +896,7 @@ void PhaseMacroExpand::process_users_of_allocation(CallNode *alloc) {
 #endif
             _igvn.replace_node(n, n->in(MemNode::Memory));
           } else if (UseShenandoahGC && n->is_g1_wb_pre_call()) {
-            eliminate_g1_wb_pre(n);
+            C->shenandoah_eliminate_g1_wb_pre(n, &_igvn);
           } else {
             eliminate_card_mark(n);
           }
@@ -1302,7 +1302,7 @@ void PhaseMacroExpand::expand_allocate_common(
     Node* init_size_in_bytes = size_in_bytes;
     if (UseShenandoahGC) {
       // Allocate several words more for the Shenandoah brooks pointer.
-      size_in_bytes = new (C) AddLNode(size_in_bytes, _igvn.MakeConX(BrooksPointer::byte_size()));
+      size_in_bytes = new (C) AddXNode(size_in_bytes, _igvn.MakeConX(BrooksPointer::byte_size()));
       transform_later(size_in_bytes);
     }
 

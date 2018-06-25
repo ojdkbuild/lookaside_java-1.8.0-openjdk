@@ -28,7 +28,7 @@
  * @library /testlibrary
  * @modules java.base/jdk.internal.misc
  *          java.management
- * @run driver/timeout=240 EvilSyncBug
+ * @run driver/timeout=480 EvilSyncBug
  */
 
 import java.util.*;
@@ -48,7 +48,7 @@ public class EvilSyncBug {
             test();
         } else {
             for (int i = 0; i < NUM_RUNS; i++) {
-                ProcessBuilder pb = ProcessTools.createJavaProcessBuilder("-Xmx128m",
+                ProcessBuilder pb = ProcessTools.createJavaProcessBuilder("-Xms128m",
                                                                           "-Xmx128m",
                                                                           "-XX:+UseShenandoahGC",
                                                                           "-XX:+UnlockDiagnosticVMOptions",

@@ -51,13 +51,10 @@ public:
 
   inline oop obj()  const { return _obj; }
 
-  DEBUG_ONLY(bool is_valid() const); // Tasks to be pushed/popped must be valid.
-
 private:
   oop _obj;
 };
 
-typedef FormatBuffer<8192> ShenandoahMessageBuffer;
 typedef Stack<ShenandoahVerifierTask, mtGC> ShenandoahVerifierStack;
 typedef volatile jint ShenandoahLivenessData;
 
@@ -128,21 +125,37 @@ public:
     _verify_liveness_complete,
   } VerifyLiveness;
 
+  typedef enum {
+    // Disable region verification
+    _verify_regions_disable,
+
+    // No trash regions allowed
+    _verify_regions_notrash,
+
+    // No collection set regions allowed
+    _verify_regions_nocset,
+
+    // No trash and no cset regions allowed
+    _verify_regions_notrash_nocset,
+  } VerifyRegions;
+
   struct VerifyOptions {
     VerifyForwarded     _verify_forwarded;
     VerifyMarked        _verify_marked;
     VerifyMatrix        _verify_matrix;
     VerifyCollectionSet _verify_cset;
     VerifyLiveness      _verify_liveness;
+    VerifyRegions       _verify_regions;
 
     VerifyOptions(VerifyForwarded verify_forwarded,
                   VerifyMarked verify_marked,
                   VerifyMatrix verify_matrix,
                   VerifyCollectionSet verify_collection_set,
-                  VerifyLiveness verify_liveness) :
+                  VerifyLiveness verify_liveness,
+                  VerifyRegions verify_regions) :
             _verify_forwarded(verify_forwarded), _verify_marked(verify_marked),
             _verify_matrix(verify_matrix), _verify_cset(verify_collection_set),
-            _verify_liveness(verify_liveness) {}
+            _verify_liveness(verify_liveness), _verify_regions(verify_regions) {}
   };
 
 private:
@@ -151,7 +164,8 @@ private:
                            VerifyMarked marked,
                            VerifyMatrix matrix,
                            VerifyCollectionSet cset,
-                           VerifyLiveness liveness);
+                           VerifyLiveness liveness,
+                           VerifyRegions regions);
 
 public:
   ShenandoahVerifier(ShenandoahHeap* heap, MarkBitMap* verification_bitmap) :
@@ -167,10 +181,8 @@ public:
   void verify_after_fullgc();
   void verify_before_partial();
   void verify_after_partial();
+  void verify_after_degenerated();
   void verify_generic(VerifyOption option);
-
-  static void verify_oop(oop obj);
-  static void verify_oop_fwdptr(oop obj, oop new_fwd);
 };
 
 #endif // SHARE_VM_GC_SHENANDOAH_SHENANDOAHVERIFIER_HPP

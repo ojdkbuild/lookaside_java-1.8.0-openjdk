@@ -25,40 +25,73 @@
 #ifndef SHARE_VM_GC_SHENANDOAH_SHENANDOAHFREESET_HPP
 #define SHARE_VM_GC_SHENANDOAH_SHENANDOAHFREESET_HPP
 
+#include "gc_implementation/shenandoah/shenandoahHeap.hpp"
 #include "gc_implementation/shenandoah/shenandoahHeapRegionSet.hpp"
 
 class ShenandoahFreeSet : public CHeapObj<mtGC> {
 private:
-  ShenandoahHeapRegion** _regions;
-  size_t _active_end;
-  size_t _reserved_end;
-  size_t _current;
+  ShenandoahHeap* const _heap;
+  BitMap _mutator_free_bitmap;
+  BitMap _collector_free_bitmap;
+  size_t _max;
+
+  // Left-most and right-most region indexes. There are no free regions outside
+  // of [left-most; right-most] index intervals
+  size_t _mutator_leftmost, _mutator_rightmost;
+  size_t _collector_leftmost, _collector_rightmost;
+
   size_t _capacity;
   size_t _used;
 
+  void assert_bounds() const PRODUCT_RETURN;
   void assert_heaplock_owned_by_current_thread() const PRODUCT_RETURN;
+  void assert_heaplock_not_owned_by_current_thread() const PRODUCT_RETURN;
 
-public:
-  ShenandoahFreeSet(size_t max_regions);
-  ~ShenandoahFreeSet();
+  bool is_mutator_free(size_t idx) const;
+  bool is_collector_free(size_t idx) const;
 
-  void add_region(ShenandoahHeapRegion* r);
-  void clear();
+  HeapWord* try_allocate_in(ShenandoahHeapRegion* region, size_t word_size, ShenandoahHeap::AllocType type, bool& in_new_region);
+  HeapWord* allocate_single(size_t word_size, ShenandoahHeap::AllocType type, bool& in_new_region);
+  HeapWord* allocate_contiguous(size_t words_size);
 
-  size_t capacity() const { return _capacity; }
-  size_t used()     const { return _used;     }
-  size_t count()    const { return _active_end - _current; }
+  void flip_to_mutator(size_t idx);
+  void flip_to_gc(size_t idx);
+
+  void adjust_bounds();
+  bool touches_bounds(size_t num) const;
 
   void increase_used(size_t amount);
+  void clear_internal();
 
-  // Regular allocation:
-  ShenandoahHeapRegion* current_no_humongous() const;
-  ShenandoahHeapRegion* next_no_humongous();
+  size_t collector_count() const { return _collector_free_bitmap.count_one_bits(); }
+  size_t mutator_count()   const { return _mutator_free_bitmap.count_one_bits();   }
+
+  void try_recycle_trashed(ShenandoahHeapRegion *r);
+
+  bool is_empty_or_trash(ShenandoahHeapRegion *r);
+  size_t alloc_capacity(ShenandoahHeapRegion *r);
+  bool has_no_alloc_capacity(ShenandoahHeapRegion *r);
+
+public:
+  ShenandoahFreeSet(ShenandoahHeap* heap, size_t max_regions);
+
+  void clear();
+  void rebuild();
+
+  void recycle_trash();
+
+  void log_status();
+  void log_status_verbose();
+
+  size_t capacity()  const { return _capacity; }
+  size_t used()      const { return _used;     }
+  size_t available() const {
+    assert(_used <= _capacity, "must use less than capacity");
+    return _capacity - _used;
+  }
+
+  HeapWord* allocate(size_t words_size, ShenandoahHeap::AllocType type, bool &in_new_region);
   size_t unsafe_peek_free() const;
-
-  // Humongous allocation:
-  ShenandoahHeapRegion* allocate_contiguous(size_t words_size);
-
   void print_on(outputStream* out) const;
 };
 

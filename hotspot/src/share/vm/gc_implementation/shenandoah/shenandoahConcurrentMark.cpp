@@ -81,7 +81,7 @@ public:
   }
 
   void work(uint worker_id) {
-    assert(SafepointSynchronize::is_at_safepoint(), "Must be at a safepoint");
+    assert(ShenandoahSafepoint::is_at_shenandoah_safepoint(), "Must be at a safepoint");
 
     ShenandoahHeap* heap = ShenandoahHeap::heap();
     ShenandoahObjToScanQueueSet* queues = heap->concurrentMark()->task_queues();
@@ -107,7 +107,7 @@ public:
 
     ResourceMark m;
     if (heap->concurrentMark()->unload_classes()) {
-      _rp->process_strong_roots(&mark_cl, _process_refs ? NULL : &mark_cl, &cldCl, &blobsCl, worker_id);
+      _rp->process_strong_roots(&mark_cl, _process_refs ? NULL : &mark_cl, &cldCl, NULL, &blobsCl, NULL, worker_id);
     } else {
       if (ShenandoahConcurrentScanCodeRoots) {
         CodeBlobClosure* code_blobs = NULL;
@@ -116,13 +116,13 @@ public:
         CodeBlobToOopClosure assert_to_space(&assert_to_space_oops, !CodeBlobToOopClosure::FixRelocations);
         // If conc code cache evac is disabled, code cache should have only to-space ptrs.
         // Otherwise, it should have to-space ptrs only if mark does not update refs.
-        if (!ShenandoahConcurrentEvacCodeRoots && !heap->need_update_refs()) {
+        if (!ShenandoahConcurrentEvacCodeRoots && !heap->has_forwarded_objects()) {
           code_blobs = &assert_to_space;
         }
 #endif
-        _rp->process_all_roots(&mark_cl, _process_refs ? NULL : &mark_cl, &cldCl, code_blobs, worker_id);
+        _rp->process_all_roots(&mark_cl, _process_refs ? NULL : &mark_cl, &cldCl, code_blobs, NULL, worker_id);
       } else {
-        _rp->process_all_roots(&mark_cl, _process_refs ? NULL : &mark_cl, &cldCl, &blobsCl, worker_id);
+        _rp->process_all_roots(&mark_cl, _process_refs ? NULL : &mark_cl, &cldCl, &blobsCl, NULL, worker_id);
       }
     }
   }
@@ -140,7 +140,7 @@ public:
   }
 
   void work(uint worker_id) {
-    assert(SafepointSynchronize::is_at_safepoint(), "Must be at a safepoint");
+    assert(ShenandoahSafepoint::is_at_shenandoah_safepoint(), "Must be at a safepoint");
 
     ShenandoahHeap* heap = ShenandoahHeap::heap();
     ShenandoahUpdateRefsClosure cl;
@@ -159,7 +159,7 @@ public:
         DEBUG_ONLY(&assert_to_space)
         NOT_DEBUG(NULL);
     }
-    _rp->process_all_roots(&cl, &cl, &cldCl, code_blobs, worker_id);
+    _rp->process_all_roots(&cl, &cl, &cldCl, code_blobs, NULL, worker_id);
   }
 };
 
@@ -181,27 +181,12 @@ public:
     ReferenceProcessor* rp;
     if (_cm->process_references()) {
       rp = ShenandoahHeap::heap()->ref_processor();
+      shenandoah_assert_rp_isalive_installed();
     } else {
       rp = NULL;
     }
 
-    ReferenceProcessorMaybeNullIsAliveMutator fix_alive(rp, ShenandoahHeap::heap()->is_alive_closure());
-
-    if (ShenandoahConcurrentScanCodeRoots && _cm->claim_codecache()) {
-      if (! _cm->unload_classes()) {
-        MutexLockerEx mu(CodeCache_lock, Mutex::_no_safepoint_check_flag);
-        if (_update_refs) {
-          ShenandoahMarkResolveRefsClosure cl(q, rp);
-          CodeBlobToOopClosure blobs(&cl, !CodeBlobToOopClosure::FixRelocations);
-          CodeCache::blobs_do(&blobs);
-        } else {
-          ShenandoahMarkRefsClosure cl(q, rp);
-          CodeBlobToOopClosure blobs(&cl, !CodeBlobToOopClosure::FixRelocations);
-          CodeCache::blobs_do(&blobs);
-        }
-      }
-    }
-
+    _cm->concurrent_scan_code_roots(worker_id, rp, _update_refs);
     _cm->mark_loop(worker_id, _terminator, rp,
                    true, // cancellable
                    true, // drain SATBs as we go
@@ -235,12 +220,14 @@ public:
     ReferenceProcessor* rp;
     if (_cm->process_references()) {
       rp = ShenandoahHeap::heap()->ref_processor();
+      shenandoah_assert_rp_isalive_installed();
     } else {
       rp = NULL;
     }
 
-    ReferenceProcessorMaybeNullIsAliveMutator fix_alive(rp, ShenandoahHeap::heap()->is_alive_closure());
-
+    // Degenerated cycle may bypass concurrent cycle, so code roots might not be scanned,
+    // let's check here.
+    _cm->concurrent_scan_code_roots(worker_id, rp, _update_refs);
     _cm->mark_loop(worker_id, _terminator, rp,
                    false, // not cancellable
                    false, // do not drain SATBs, already drained
@@ -252,9 +239,9 @@ public:
   }
 };
 
-void ShenandoahConcurrentMark::mark_roots(ShenandoahCollectorPolicy::TimingPhase root_phase) {
+void ShenandoahConcurrentMark::mark_roots(ShenandoahPhaseTimings::Phase root_phase) {
   assert(Thread::current()->is_VM_thread(), "can only do this in VMThread");
-  assert(SafepointSynchronize::is_at_safepoint(), "Must be at a safepoint");
+  assert(ShenandoahSafepoint::is_at_shenandoah_safepoint(), "Must be at a safepoint");
 
   ShenandoahHeap* heap = ShenandoahHeap::heap();
 
@@ -269,11 +256,11 @@ void ShenandoahConcurrentMark::mark_roots(ShenandoahCollectorPolicy::TimingPhase
   TASKQUEUE_STATS_ONLY(reset_taskqueue_stats());
   task_queues()->reserve(nworkers);
 
-  if (heap->need_update_refs()) {
+  if (heap->has_forwarded_objects()) {
     ShenandoahInitMarkRootsTask<RESOLVE> mark_roots(&root_proc, process_references());
     workers->run_task(&mark_roots);
   } else {
-    // No need to update references, which means the heap is clean.
+    // No need to update references, which means the heap is stable.
     // Can save time not walking through forwarding pointers.
     ShenandoahInitMarkRootsTask<NONE> mark_roots(&root_proc, process_references());
     workers->run_task(&mark_roots);
@@ -286,29 +273,22 @@ void ShenandoahConcurrentMark::mark_roots(ShenandoahCollectorPolicy::TimingPhase
 
 void ShenandoahConcurrentMark::init_mark_roots() {
   assert(Thread::current()->is_VM_thread(), "can only do this in VMThread");
-  assert(SafepointSynchronize::is_at_safepoint(), "Must be at a safepoint");
+  assert(ShenandoahSafepoint::is_at_shenandoah_safepoint(), "Must be at a safepoint");
 
-  ShenandoahHeap* heap = ShenandoahHeap::heap();
-
-  // Set up ref processing and class unloading.
-  ShenandoahCollectorPolicy* policy = heap->shenandoahPolicy();
-  set_process_references(policy->process_references());
-  set_unload_classes(policy->unload_classes());
-
-  mark_roots(ShenandoahCollectorPolicy::scan_roots);
+  mark_roots(ShenandoahPhaseTimings::scan_roots);
 }
 
-void ShenandoahConcurrentMark::update_roots(ShenandoahCollectorPolicy::TimingPhase root_phase) {
-  assert(SafepointSynchronize::is_at_safepoint(), "Must be at a safepoint");
+void ShenandoahConcurrentMark::update_roots(ShenandoahPhaseTimings::Phase root_phase) {
+  assert(ShenandoahSafepoint::is_at_shenandoah_safepoint(), "Must be at a safepoint");
 
   bool update_code_cache = true; // initialize to safer value
   switch (root_phase) {
-    case ShenandoahCollectorPolicy::update_roots:
-    case ShenandoahCollectorPolicy::final_update_refs_roots:
+    case ShenandoahPhaseTimings::update_roots:
+    case ShenandoahPhaseTimings::final_update_refs_roots:
       // If code cache was evacuated concurrently, we need to update code cache roots.
       update_code_cache = ShenandoahConcurrentEvacCodeRoots;
       break;
-    case ShenandoahCollectorPolicy::full_gc_roots:
+    case ShenandoahPhaseTimings::full_gc_roots:
       update_code_cache = true;
       break;
     default:
@@ -342,9 +322,6 @@ void ShenandoahConcurrentMark::initialize(uint workers) {
     task_queue->initialize();
     _task_queues->register_queue(i, task_queue);
   }
-  _process_references = false;
-  _unload_classes = false;
-  _claimed_codecache = 0;
 
   JavaThread::satb_mark_queue_set().set_buffer_size(ShenandoahSATBBufferSize);
 
@@ -355,14 +332,32 @@ void ShenandoahConcurrentMark::initialize(uint workers) {
   }
 }
 
+void ShenandoahConcurrentMark::concurrent_scan_code_roots(uint worker_id, ReferenceProcessor* rp, bool update_refs) {
+  if (ShenandoahConcurrentScanCodeRoots && claim_codecache()) {
+    ShenandoahObjToScanQueue* q = task_queues()->queue(worker_id);
+    if (!unload_classes()) {
+      MutexLockerEx mu(CodeCache_lock, Mutex::_no_safepoint_check_flag);
+      if (update_refs) {
+        ShenandoahMarkResolveRefsClosure cl(q, rp);
+        CodeBlobToOopClosure blobs(&cl, !CodeBlobToOopClosure::FixRelocations);
+        CodeCache::blobs_do(&blobs);
+      } else {
+        ShenandoahMarkRefsClosure cl(q, rp);
+        CodeBlobToOopClosure blobs(&cl, !CodeBlobToOopClosure::FixRelocations);
+        CodeCache::blobs_do(&blobs);
+      }
+    }
+  }
+}
+
 void ShenandoahConcurrentMark::mark_from_roots() {
   ShenandoahHeap* sh = ShenandoahHeap::heap();
   WorkGang* workers = sh->workers();
   uint nworkers = workers->active_workers();
 
-  bool update_refs = sh->need_update_refs();
+  bool update_refs = sh->has_forwarded_objects();
 
-  ShenandoahGCPhase conc_mark_phase(ShenandoahCollectorPolicy::conc_mark);
+  ShenandoahGCPhase conc_mark_phase(ShenandoahPhaseTimings::conc_mark);
 
   if (process_references()) {
     ReferenceProcessor* rp = sh->ref_processor();
@@ -372,6 +367,9 @@ void ShenandoahConcurrentMark::mark_from_roots() {
     rp->enable_discovery(true /*verify_no_refs*/, true);
     rp->setup_policy(sh->is_full_gc_in_progress()); // snapshot the soft ref policy to be used in this cycle
   }
+
+  shenandoah_assert_rp_isalive_not_installed();
+  ReferenceProcessorIsAliveMutator fix_isalive(sh->ref_processor(), sh->is_alive_closure());
 
   task_queues()->reserve(nworkers);
 
@@ -394,7 +392,7 @@ void ShenandoahConcurrentMark::mark_from_roots() {
 }
 
 void ShenandoahConcurrentMark::finish_mark_from_roots() {
-  assert(SafepointSynchronize::is_at_safepoint(), "Must be at a safepoint");
+  assert(ShenandoahSafepoint::is_at_shenandoah_safepoint(), "Must be at a safepoint");
 
   ShenandoahHeap* sh = ShenandoahHeap::heap();
 
@@ -402,15 +400,15 @@ void ShenandoahConcurrentMark::finish_mark_from_roots() {
 
   shared_finish_mark_from_roots(/* full_gc = */ false);
 
-  if (sh->need_update_refs()) {
-    update_roots(ShenandoahCollectorPolicy::update_roots);
+  if (sh->has_forwarded_objects()) {
+    update_roots(ShenandoahPhaseTimings::update_roots);
   }
 
   TASKQUEUE_STATS_ONLY(print_taskqueue_stats());
 }
 
 void ShenandoahConcurrentMark::shared_finish_mark_from_roots(bool full_gc) {
-  assert(SafepointSynchronize::is_at_safepoint(), "Must be at a safepoint");
+  assert(ShenandoahSafepoint::is_at_shenandoah_safepoint(), "Must be at a safepoint");
 
   ShenandoahHeap* sh = ShenandoahHeap::heap();
 
@@ -425,19 +423,22 @@ void ShenandoahConcurrentMark::shared_finish_mark_from_roots(bool full_gc) {
   // The implementation is the same, so it's shared here.
   {
     ShenandoahGCPhase phase(full_gc ?
-                               ShenandoahCollectorPolicy::full_gc_mark_finish_queues :
-                               ShenandoahCollectorPolicy::finish_queues);
+                               ShenandoahPhaseTimings::full_gc_mark_finish_queues :
+                               ShenandoahPhaseTimings::finish_queues);
     bool count_live = !(ShenandoahNoLivenessFullGC && full_gc); // we do not need liveness data for full GC
     task_queues()->reserve(nworkers);
+
+    shenandoah_assert_rp_isalive_not_installed();
+    ReferenceProcessorIsAliveMutator fix_isalive(sh->ref_processor(), sh->is_alive_closure());
 
     SharedHeap::StrongRootsScope scope(sh, true);
     if (UseShenandoahOWST) {
       ShenandoahTaskTerminator terminator(nworkers, task_queues());
-      ShenandoahFinalMarkingTask task(this, &terminator, sh->need_update_refs(), count_live, unload_classes());
+      ShenandoahFinalMarkingTask task(this, &terminator, sh->has_forwarded_objects(), count_live, unload_classes());
       sh->workers()->run_task(&task);
     } else {
       ParallelTaskTerminator terminator(nworkers, task_queues());
-      ShenandoahFinalMarkingTask task(this, &terminator, sh->need_update_refs(), count_live, unload_classes());
+      ShenandoahFinalMarkingTask task(this, &terminator, sh->has_forwarded_objects(), count_live, unload_classes());
       sh->workers()->run_task(&task);
     }
   }
@@ -544,21 +545,21 @@ public:
   }
 
   void do_void() {
-    assert(SafepointSynchronize::is_at_safepoint(), "Must be at a safepoint");
+    assert(ShenandoahSafepoint::is_at_shenandoah_safepoint(), "Must be at a safepoint");
 
     ShenandoahHeap* sh = ShenandoahHeap::heap();
     ShenandoahConcurrentMark* scm = sh->concurrentMark();
     assert(scm->process_references(), "why else would we be here?");
     ReferenceProcessor* rp = sh->ref_processor();
 
-    ReferenceProcessorIsAliveMutator fix_alive(rp, ShenandoahHeap::heap()->is_alive_closure());
+    shenandoah_assert_rp_isalive_installed();
 
     scm->mark_loop(_worker_id, _terminator, rp,
                    false, // not cancellable
                    false, // do not drain SATBs
                    true,  // count liveness
                    scm->unload_classes(),
-                   sh->need_update_refs());
+                   sh->has_forwarded_objects());
 
     if (_reset_terminator) {
       _terminator->reset_for_reuse();
@@ -618,10 +619,10 @@ public:
   }
 
   void work(uint worker_id) {
-    assert(SafepointSynchronize::is_at_safepoint(), "Must be at a safepoint");
+    assert(ShenandoahSafepoint::is_at_shenandoah_safepoint(), "Must be at a safepoint");
     ShenandoahHeap* heap = ShenandoahHeap::heap();
     ShenandoahCMDrainMarkingStackClosure complete_gc(worker_id, _terminator);
-    if (heap->need_update_refs()) {
+    if (heap->has_forwarded_objects()) {
       ShenandoahForwardedIsAliveClosure is_alive;
       ShenandoahCMKeepAliveUpdateClosure keep_alive(heap->concurrentMark()->get_queue(worker_id));
       _proc_task.work(worker_id, is_alive, keep_alive, complete_gc);
@@ -663,7 +664,7 @@ public:
 
   // Executes a task using worker threads.
   void execute(ProcessTask& task) {
-    assert(SafepointSynchronize::is_at_safepoint(), "Must be at a safepoint");
+    assert(ShenandoahSafepoint::is_at_shenandoah_safepoint(), "Must be at a safepoint");
 
     // Shortcut execution if task is empty.
     // This should be replaced with the generic ReferenceProcessor shortcut,
@@ -699,10 +700,10 @@ void ShenandoahConcurrentMark::weak_refs_work(bool full_gc) {
 
   ShenandoahHeap* sh = ShenandoahHeap::heap();
 
-  ShenandoahCollectorPolicy::TimingPhase phase_root =
+  ShenandoahPhaseTimings::Phase phase_root =
           full_gc ?
-          ShenandoahCollectorPolicy::full_gc_weakrefs :
-          ShenandoahCollectorPolicy::weakrefs;
+          ShenandoahPhaseTimings::full_gc_weakrefs :
+          ShenandoahPhaseTimings::weakrefs;
 
   ShenandoahGCPhase phase(phase_root);
 
@@ -719,17 +720,18 @@ void ShenandoahConcurrentMark::weak_refs_work_doit(bool full_gc) {
 
   ReferenceProcessor* rp = sh->ref_processor();
 
-  ShenandoahCollectorPolicy::TimingPhase phase_process =
+  ShenandoahPhaseTimings::Phase phase_process =
           full_gc ?
-          ShenandoahCollectorPolicy::full_gc_weakrefs_process :
-          ShenandoahCollectorPolicy::weakrefs_process;
+          ShenandoahPhaseTimings::full_gc_weakrefs_process :
+          ShenandoahPhaseTimings::weakrefs_process;
 
-  ShenandoahCollectorPolicy::TimingPhase phase_enqueue =
+  ShenandoahPhaseTimings::Phase phase_enqueue =
           full_gc ?
-          ShenandoahCollectorPolicy::full_gc_weakrefs_enqueue :
-          ShenandoahCollectorPolicy::weakrefs_enqueue;
+          ShenandoahPhaseTimings::full_gc_weakrefs_enqueue :
+          ShenandoahPhaseTimings::weakrefs_enqueue;
 
-  ReferenceProcessorIsAliveMutator fix_alive(rp, sh->is_alive_closure());
+  shenandoah_assert_rp_isalive_not_installed();
+  ReferenceProcessorIsAliveMutator fix_isalive(rp, sh->is_alive_closure());
 
   WorkGang* workers = sh->workers();
   uint nworkers = workers->active_workers();
@@ -755,7 +757,7 @@ void ShenandoahConcurrentMark::weak_refs_work_doit(bool full_gc) {
   {
     ShenandoahGCPhase phase(phase_process);
 
-    if (sh->need_update_refs()) {
+    if (sh->has_forwarded_objects()) {
       ShenandoahForwardedIsAliveClosure is_alive;
       ShenandoahCMKeepAliveUpdateClosure keep_alive(get_queue(serial_worker_id));
       rp->process_discovered_references(&is_alive, &keep_alive,
@@ -792,16 +794,17 @@ public:
     ShenandoahHeap* sh = ShenandoahHeap::heap();
     ShenandoahConcurrentMark* scm = sh->concurrentMark();
     assert(scm->process_references(), "why else would we be here?");
-    ReferenceProcessor* rp = sh->ref_processor();
     ParallelTaskTerminator terminator(1, scm->task_queues());
-    ReferenceProcessorIsAliveMutator fix_alive(rp, ShenandoahHeap::heap()->is_alive_closure());
+
+    ReferenceProcessor* rp = sh->ref_processor();
+    shenandoah_assert_rp_isalive_installed();
 
     scm->mark_loop(0, &terminator, rp,
                    false, // not cancellable
                    true,  // drain SATBs
                    true,  // count liveness
                    scm->unload_classes(),
-                   sh->need_update_refs());
+                   sh->has_forwarded_objects());
   }
 };
 
@@ -836,7 +839,9 @@ void ShenandoahConcurrentMark::preclean_weak_refs() {
   ShenandoahHeap* sh = ShenandoahHeap::heap();
   ReferenceProcessor* rp = sh->ref_processor();
   ReferenceProcessorMTDiscoveryMutator fix_mt_discovery(rp, false);
-  ReferenceProcessorIsAliveMutator fix_alive(rp, sh->is_alive_closure());
+
+  shenandoah_assert_rp_isalive_not_installed();
+  ReferenceProcessorIsAliveMutator fix_isalive(rp, sh->is_alive_closure());
 
   // Interrupt on cancelled GC
   ShenandoahCancelledGCYieldClosure yield;
@@ -844,7 +849,7 @@ void ShenandoahConcurrentMark::preclean_weak_refs() {
   assert(task_queues()->is_empty(), "Should be empty");
 
   ShenandoahPrecleanCompleteGCClosure complete_gc;
-  if (sh->need_update_refs()) {
+  if (sh->has_forwarded_objects()) {
     ShenandoahForwardedIsAliveClosure is_alive;
     ShenandoahPrecleanKeepAliveUpdateClosure keep_alive(get_queue(0));
     ResourceMark rm;
@@ -883,8 +888,8 @@ void ShenandoahConcurrentMark::clear_queue(ShenandoahObjToScanQueue *q) {
   q->clear_buffer();
 }
 
-template <bool CANCELLABLE, bool DRAIN_SATB, bool COUNT_LIVENESS, bool CLASS_UNLOAD, bool UPDATE_REFS>
-void ShenandoahConcurrentMark::mark_loop_prework(uint w, ParallelTaskTerminator *t, ReferenceProcessor *rp) {
+template <bool CANCELLABLE, bool DRAIN_SATB, bool COUNT_LIVENESS>
+void ShenandoahConcurrentMark::mark_loop_prework(uint w, ParallelTaskTerminator *t, ReferenceProcessor *rp, bool class_unload, bool update_refs) {
   ShenandoahObjToScanQueue* q = get_queue(w);
 
   jushort* ld;
@@ -897,8 +902,8 @@ void ShenandoahConcurrentMark::mark_loop_prework(uint w, ParallelTaskTerminator 
 
   // TODO: We can clean up this if we figure out how to do templated oop closures that
   // play nice with specialized_oop_iterators.
-  if (CLASS_UNLOAD) {
-    if (UPDATE_REFS) {
+  if (class_unload) {
+    if (update_refs) {
       ShenandoahMarkUpdateRefsMetadataClosure cl(q, rp);
       mark_loop_work<ShenandoahMarkUpdateRefsMetadataClosure, CANCELLABLE, DRAIN_SATB, COUNT_LIVENESS>(&cl, ld, w, t);
     } else {
@@ -906,7 +911,7 @@ void ShenandoahConcurrentMark::mark_loop_prework(uint w, ParallelTaskTerminator 
       mark_loop_work<ShenandoahMarkRefsMetadataClosure, CANCELLABLE, DRAIN_SATB, COUNT_LIVENESS>(&cl, ld, w, t);
     }
   } else {
-    if (UPDATE_REFS) {
+    if (update_refs) {
       ShenandoahMarkUpdateRefsClosure cl(q, rp);
       mark_loop_work<ShenandoahMarkUpdateRefsClosure, CANCELLABLE, DRAIN_SATB, COUNT_LIVENESS>(&cl, ld, w, t);
     } else {
@@ -916,11 +921,11 @@ void ShenandoahConcurrentMark::mark_loop_prework(uint w, ParallelTaskTerminator 
   }
 
   if (COUNT_LIVENESS) {
-    for (uint i = 0; i < _heap->regions()->active_regions(); i++) {
-      ShenandoahHeapRegion* r = _heap->regions()->get(i);
+    for (uint i = 0; i < _heap->num_regions(); i++) {
+      ShenandoahHeapRegion* r = _heap->get_region(i);
       jushort live = ld[i];
       if (live > 0) {
-        r->increase_live_data_words(live);
+        r->increase_live_data_gc_words(live);
       }
     }
   }
@@ -989,31 +994,22 @@ void ShenandoahConcurrentMark::mark_loop_work(T* cl, jushort* live_data, uint wo
   }
 }
 
-void ShenandoahConcurrentMark::set_process_references(bool pr) {
-  _process_references = pr;
-}
-
 bool ShenandoahConcurrentMark::process_references() const {
-  return _process_references;
-}
-
-void ShenandoahConcurrentMark::set_unload_classes(bool uc) {
-  _unload_classes = uc;
+  return _heap->process_references();
 }
 
 bool ShenandoahConcurrentMark::unload_classes() const {
-  return _unload_classes;
+  return _heap->unload_classes();
 }
 
 bool ShenandoahConcurrentMark::claim_codecache() {
   assert(ShenandoahConcurrentScanCodeRoots, "must not be called otherwise");
-  jbyte old = Atomic::cmpxchg(1, &_claimed_codecache, 0);
-  return old == 0;
+  return _claimed_codecache.try_set();
 }
 
 void ShenandoahConcurrentMark::clear_claim_codecache() {
   assert(ShenandoahConcurrentScanCodeRoots, "must not be called otherwise");
-  _claimed_codecache = 0;
+  _claimed_codecache.unset();
 }
 
 jushort* ShenandoahConcurrentMark::get_liveness(uint worker_id) {

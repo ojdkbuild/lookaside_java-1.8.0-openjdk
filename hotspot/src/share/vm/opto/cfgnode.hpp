@@ -220,8 +220,6 @@ public:
 #else //ASSERT
   void verify_adr_type(bool recursive = false) const {}
 #endif //ASSERT
-
-  PhiNode* has_only_data_users() const;
 };
 
 //------------------------------GotoNode---------------------------------------
@@ -367,6 +365,7 @@ public:
   static const TypeInt* filtered_int_type(PhaseGVN* phase, Node* val, Node* if_proj);
 
   bool is_g1_marking_if(PhaseTransform *phase) const;
+  bool is_shenandoah_marking_if(PhaseTransform *phase) const;
 
 #ifndef PRODUCT
   virtual void dump_spec(outputStream *st) const;

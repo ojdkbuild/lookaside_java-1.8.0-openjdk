@@ -23,29 +23,50 @@
 
 #include "precompiled.hpp"
 
+#include "gc_implementation/shenandoah/shenandoahAllocTracker.hpp"
+#include "gc_implementation/shenandoah/shenandoahCollectorPolicy.hpp"
+#include "gc_implementation/shenandoah/shenandoahMarkCompact.hpp"
 #include "gc_implementation/shenandoah/shenandoahHeap.hpp"
 #include "gc_implementation/shenandoah/shenandoahUtils.hpp"
-#include "gc_implementation/shenandoah/shenandoahMarkCompact.hpp"
 #include "gc_implementation/shenandoah/shenandoahLogging.hpp"
 #include "gc_implementation/shared/gcTimer.hpp"
 
 
-ShenandoahGCSession::ShenandoahGCSession(bool is_full_gc) {
-  _timer = is_full_gc ? ShenandoahMarkCompact::gc_timer() :
-                        ShenandoahHeap::heap()->gc_timer();
-
+ShenandoahGCSession::ShenandoahGCSession() {
+  ShenandoahHeap* sh = ShenandoahHeap::heap();
+  _timer = sh->gc_timer();
   _timer->register_gc_start();
+  sh->shenandoahPolicy()->record_cycle_start();
+  _trace_cycle.initialize(false, sh->gc_cause(),
+          /* recordGCBeginTime = */       true,
+          /* recordPreGCUsage = */        true,
+          /* recordPeakUsage = */         true,
+          /* recordPostGCUsage = */       true,
+          /* recordAccumulatedGCTime = */ true,
+          /* recordGCEndTime = */         true,
+          /* countCollection = */         true
+  );
 }
 
 ShenandoahGCSession::~ShenandoahGCSession() {
+  ShenandoahHeap::heap()->shenandoahPolicy()->record_cycle_end();
   _timer->register_gc_end();
 }
 
-ShenandoahGCPauseMark::ShenandoahGCPauseMark(ShenandoahCollectorPolicy::TimingPhase phase, SvcGCMarker::reason_type type)
-        : _svc_gc_mark(type), _is_gc_active_mark(),
-          _phase_total(ShenandoahCollectorPolicy::total_pause), _phase_this(phase) {
+ShenandoahGCPauseMark::ShenandoahGCPauseMark(SvcGCMarker::reason_type type) :
+        _svc_gc_mark(type), _is_gc_active_mark() {
   ShenandoahHeap* sh = ShenandoahHeap::heap();
   sh->shenandoahPolicy()->record_gc_start();
+
+  _trace_pause.initialize(true, sh->gc_cause(),
+          /* recordGCBeginTime = */       true,
+          /* recordPreGCUsage = */        false,
+          /* recordPeakUsage = */         false,
+          /* recordPostGCUsage = */       false,
+          /* recordAccumulatedGCTime = */ true,
+          /* recordGCEndTime = */         true,
+          /* countCollection = */         true
+  );
 }
 
 ShenandoahGCPauseMark::~ShenandoahGCPauseMark() {
@@ -53,13 +74,13 @@ ShenandoahGCPauseMark::~ShenandoahGCPauseMark() {
   sh->shenandoahPolicy()->record_gc_end();
 }
 
-ShenandoahGCPhase::ShenandoahGCPhase(const ShenandoahCollectorPolicy::TimingPhase phase) :
+ShenandoahGCPhase::ShenandoahGCPhase(const ShenandoahPhaseTimings::Phase phase) :
   _phase(phase) {
-  ShenandoahHeap::heap()->shenandoahPolicy()->record_phase_start(_phase);
+  ShenandoahHeap::heap()->phase_timings()->record_phase_start(_phase);
 }
 
 ShenandoahGCPhase::~ShenandoahGCPhase() {
-  ShenandoahHeap::heap()->shenandoahPolicy()->record_phase_end(_phase);
+  ShenandoahHeap::heap()->phase_timings()->record_phase_end(_phase);
 }
 
 ShenandoahAllocTrace::ShenandoahAllocTrace(size_t words_size, ShenandoahHeap::AllocType alloc_type) {
@@ -79,7 +100,9 @@ ShenandoahAllocTrace::~ShenandoahAllocTrace() {
     double stop = os::elapsedTime();
     double duration_sec = stop - _start;
     double duration_us = duration_sec * 1000000;
-    ShenandoahHeap::heap()->shenandoahPolicy()->record_alloc_latency(_size, _alloc_type, duration_us);
+    ShenandoahAllocTracker* tracker = ShenandoahHeap::heap()->alloc_tracker();
+    assert(tracker != NULL, "Must be");
+    tracker->record_alloc_latency(_size, _alloc_type, duration_us);
     if (duration_us > ShenandoahAllocationStallThreshold) {
       log_warning(gc)("Allocation stall: %.0f us (threshold: " INTX_FORMAT " us)",
                       duration_us, ShenandoahAllocationStallThreshold);
