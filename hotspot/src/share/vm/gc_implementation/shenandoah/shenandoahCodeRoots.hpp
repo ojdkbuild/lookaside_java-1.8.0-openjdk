@@ -34,11 +34,49 @@ class ShenandoahHeap;
 class ShenandoahHeapRegion;
 class ShenandoahCodeRootsLock;
 
+class ShenandoahParallelCodeCacheIterator VALUE_OBJ_CLASS_SPEC {
+  friend class CodeCache;
+private:
+  volatile int  _claimed_idx;
+  volatile bool _finished;
+public:
+  ShenandoahParallelCodeCacheIterator();
+  void parallel_blobs_do(CodeBlobClosure* f);
+};
+
+// ShenandoahNMethod tuple records the internal locations of oop slots within the nmethod.
+// This allows us to quickly scan the oops without doing the nmethod-internal scans, that
+// sometimes involves parsing the machine code. Note it does not record the oops themselves,
+// because it would then require handling these tuples as the new class of roots.
+class ShenandoahNMethod : public CHeapObj<mtGC> {
+private:
+  nmethod* _nm;
+  oop**    _oops;
+  int      _oops_count;
+
+public:
+  ShenandoahNMethod(nmethod *nm, GrowableArray<oop*>* oops);
+  ~ShenandoahNMethod();
+
+  nmethod* nm() {
+    return _nm;
+  }
+
+  bool has_cset_oops(ShenandoahHeap* heap);
+
+  void assert_alive_and_correct() PRODUCT_RETURN;
+  void assert_same_oops(GrowableArray<oop*>* oops) PRODUCT_RETURN;
+
+  static bool find_with_nmethod(void* nm, ShenandoahNMethod* other) {
+    return other->_nm == nm;
+  }
+};
+
 class ShenandoahCodeRootsIterator VALUE_OBJ_CLASS_SPEC {
   friend class ShenandoahCodeRoots;
 protected:
   ShenandoahHeap* _heap;
-  ParallelCodeCacheIterator _par_iterator;
+  ShenandoahParallelCodeCacheIterator _par_iterator;
   ShenandoahSharedFlag _seq_claimed;
   volatile jlong _claimed;
 protected:
@@ -87,14 +125,11 @@ public:
   static ShenandoahCsetCodeRootsIterator cset_iterator();
 
 private:
-  static volatile jint _recorded_nmethods_lock;
-  static GrowableArray<nmethod*>* _recorded_nmethods;
-
-  static void fast_add_nmethod(nmethod* nm);
-  static void fast_remove_nmethod(nmethod* nm);
+  static volatile jint _recorded_nms_lock;
+  static GrowableArray<ShenandoahNMethod*>* _recorded_nms;
 
   static void acquire_lock(bool write) {
-    volatile jint* loc = &_recorded_nmethods_lock;
+    volatile jint* loc = &_recorded_nms_lock;
     if (write) {
       while ((OrderAccess::load_acquire(loc) != 0) ||
              Atomic::cmpxchg(-1, loc, 0) != 0) {
@@ -107,17 +142,17 @@ private:
         if (cur >= 0) {
           if (Atomic::cmpxchg(cur + 1, loc, cur) == cur) {
             // Success!
+            assert (*loc > 0, "acquired for read");
             return;
           }
         }
         SpinPause();
       }
-      assert (*loc > 1, "acquired for read");
     }
   }
 
   static void release_lock(bool write) {
-    volatile jint* loc = &ShenandoahCodeRoots::_recorded_nmethods_lock;
+    volatile jint* loc = &ShenandoahCodeRoots::_recorded_nms_lock;
     if (write) {
       OrderAccess::release_store_fence(loc, 0);
     } else {

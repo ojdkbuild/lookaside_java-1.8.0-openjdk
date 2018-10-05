@@ -33,6 +33,15 @@ ShenandoahAggressiveHeuristics::ShenandoahAggressiveHeuristics() : ShenandoahHeu
 
   // Aggressive runs with max speed for allocation, to capture races against mutator
   SHENANDOAH_ERGO_DISABLE_FLAG(ShenandoahPacing);
+
+  // Aggressive evacuates everything, so it needs as much evac space as it can get
+  SHENANDOAH_ERGO_ENABLE_FLAG(ShenandoahEvacReserveOverflow);
+
+  // If class unloading is globally enabled, aggressive does unloading even with
+  // concurrent cycles.
+  if (ClassUnloading) {
+    SHENANDOAH_ERGO_OVERRIDE_DEFAULT(ShenandoahUnloadClassesFrequency, 1);
+  }
 }
 
 void ShenandoahAggressiveHeuristics::choose_collection_set_from_regiondata(ShenandoahCollectionSet* cset,
@@ -47,6 +56,7 @@ void ShenandoahAggressiveHeuristics::choose_collection_set_from_regiondata(Shena
 }
 
 bool ShenandoahAggressiveHeuristics::should_start_normal_gc() const {
+  log_info(gc)("Trigger: Start next cycle immediately");
   return true;
 }
 

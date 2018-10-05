@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2016 Red Hat, Inc. and/or its affiliates.
+ * Copyright (c) 2018, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -18,31 +19,17 @@
  * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
  * or visit www.oracle.com if you need additional information or have any
  * questions.
- *
  */
 
-/**
- * @test TestAllocSmallObjOOM
- * @summary Test allocation of small object to result OOM, but not to crash JVM
- * @modules java.base/jdk.internal.misc
- * @library /testlibrary
- * @run main/othervm TestAllocSmallObjOOM
- */
+import java.security.*;
 
-import com.oracle.java.testlibrary.*;
+public final class MyProvider extends Provider {
 
-
-public class TestAllocSmallObjOOM {
-
-    public static void main(String[] args) {
-        try {
-            // Small heap size should result OOM during loading of system classes
-            ProcessBuilder pb = ProcessTools.createJavaProcessBuilder("-Xmx5m",  "-XX:+UseShenandoahGC");
-            OutputAnalyzer analyzer = new OutputAnalyzer(pb.start());
-            analyzer.shouldHaveExitValue(1);
-            analyzer.shouldContain("java.lang.OutOfMemoryError: Java heap space");
-        } catch (Exception e) {
-        }
-
+    public MyProvider() {
+        super("MyProvider", 1.0d,
+                "Test Provider: SHA1/MD5/SHA256 exhaustion testing");
+        put("MessageDigest.SHA", "DigestBase$SHA");
+        put("MessageDigest.MD5", "DigestBase$MD5");
+        put("MessageDigest.SHA-256", "DigestBase$SHA256");
     }
 }

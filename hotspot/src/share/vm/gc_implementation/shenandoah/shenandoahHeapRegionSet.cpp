@@ -33,19 +33,18 @@
 ShenandoahHeapRegionSetIterator::ShenandoahHeapRegionSetIterator(const ShenandoahHeapRegionSet* const set) :
         _set(set), _current_index(0), _heap(ShenandoahHeap::heap()) {}
 
-ShenandoahHeapRegionSetIterator& ShenandoahHeapRegionSetIterator::operator=(const ShenandoahHeapRegionSetIterator& o) {
-  _current_index = o._current_index;
-  assert(_set == o._set, "must be same");
-  assert(_heap == o._heap, "must be same");
-  return *this;
+void ShenandoahHeapRegionSetIterator::reset(const ShenandoahHeapRegionSet* const set) {
+  _set = set;
+  _current_index = 0;
 }
 
 ShenandoahHeapRegionSet::ShenandoahHeapRegionSet() :
         _heap(ShenandoahHeap::heap()),
         _map_size(_heap->num_regions()),
+        _region_size_bytes_shift(ShenandoahHeapRegion::region_size_bytes_shift()),
         _set_map(NEW_C_HEAP_ARRAY(jbyte, _map_size, mtGC)),
         // Bias set map's base address for fast test if an oop is in set
-        _biased_set_map(_set_map - ((uintx)_heap->base() >> ShenandoahHeapRegion::region_size_bytes_shift())),
+        _biased_set_map(_set_map - ((uintx)_heap->base() >> _region_size_bytes_shift)),
         _region_count(0)
 {
   // Use 1-byte data type

@@ -28,22 +28,24 @@
 #include "gc_implementation/shenandoah/shenandoahAsserts.hpp"
 #include "gc_implementation/shenandoah/shenandoahBarrierSet.inline.hpp"
 #include "gc_implementation/shenandoah/shenandoahConcurrentMark.hpp"
+#include "gc_implementation/shenandoah/shenandoahMarkingContext.inline.hpp"
 #include "gc_implementation/shenandoah/shenandoahHeap.inline.hpp"
+#include "gc_implementation/shenandoah/shenandoahStringDedup.hpp"
 #include "gc_implementation/shenandoah/shenandoahTaskqueue.inline.hpp"
 #include "memory/iterator.inline.hpp"
 #include "oops/oop.inline.hpp"
 #include "runtime/prefetch.inline.hpp"
 
-template <class T, bool COUNT_LIVENESS>
+template <class T>
 void ShenandoahConcurrentMark::do_task(ShenandoahObjToScanQueue* q, T* cl, jushort* live_data, ShenandoahMarkTask* task) {
   oop obj = task->obj();
 
   shenandoah_assert_not_forwarded(NULL, obj);
   shenandoah_assert_marked_next(NULL, obj);
-  shenandoah_assert_not_in_cset_except(NULL, obj, _heap->cancelled_concgc());
+  shenandoah_assert_not_in_cset_except(NULL, obj, _heap->cancelled_gc());
 
   if (task->is_not_chunked()) {
-    if (COUNT_LIVENESS) count_liveness(live_data, obj);
+    count_liveness(live_data, obj);
     if (obj->is_instance()) {
       // Case 1: Normal oop, process as usual.
       obj->oop_iterate(cl);
@@ -206,29 +208,39 @@ class ShenandoahSATBBufferClosure : public SATBBufferClosure {
 private:
   ShenandoahObjToScanQueue* _queue;
   ShenandoahHeap* _heap;
+  ShenandoahMarkingContext* const _mark_context;
 public:
   ShenandoahSATBBufferClosure(ShenandoahObjToScanQueue* q) :
-    _queue(q), _heap(ShenandoahHeap::heap())
+    _queue(q),
+    _heap(ShenandoahHeap::heap()),
+    _mark_context(_heap->next_marking_context())
   {
   }
 
-  void do_buffer(void** buffer, size_t size) {
+  void do_buffer(void **buffer, size_t size) {
+    if (_heap->has_forwarded_objects()) {
+      do_buffer_impl<RESOLVE>(buffer, size);
+    } else {
+      do_buffer_impl<NONE>(buffer, size);
+    }
+  }
+
+  template<UpdateRefsMode UPDATE_REFS>
+  void do_buffer_impl(void **buffer, size_t size) {
     for (size_t i = 0; i < size; ++i) {
-      oop* p = (oop*) &buffer[i];
-      ShenandoahConcurrentMark::mark_through_ref<oop, RESOLVE>(p, _heap, _queue);
+      oop *p = (oop *) &buffer[i];
+      ShenandoahConcurrentMark::mark_through_ref<oop, UPDATE_REFS>(p, _heap, _queue, _mark_context);
     }
   }
 };
 
-inline bool ShenandoahConcurrentMark::try_draining_satb_buffer(ShenandoahObjToScanQueue *q, ShenandoahMarkTask &task) {
-  ShenandoahSATBBufferClosure cl(q);
-  SATBMarkQueueSet& satb_mq_set = JavaThread::satb_mark_queue_set();
-  bool had_refs = satb_mq_set.apply_closure_to_completed_buffer(&cl);
-  return had_refs && try_queue(q, task);
+template<class T, UpdateRefsMode UPDATE_REFS>
+inline void ShenandoahConcurrentMark::mark_through_ref(T *p, ShenandoahHeap* heap, ShenandoahObjToScanQueue* q, ShenandoahMarkingContext* const mark_context) {
+  ShenandoahConcurrentMark::mark_through_ref<T, UPDATE_REFS, false /* string dedup */>(p, heap, q, mark_context, NULL);
 }
 
-template<class T, UpdateRefsMode UPDATE_REFS>
-inline void ShenandoahConcurrentMark::mark_through_ref(T *p, ShenandoahHeap* heap, ShenandoahObjToScanQueue* q) {
+template<class T, UpdateRefsMode UPDATE_REFS, bool STRING_DEDUP>
+inline void ShenandoahConcurrentMark::mark_through_ref(T *p, ShenandoahHeap* heap, ShenandoahObjToScanQueue* q, ShenandoahMarkingContext* const mark_context, ShenandoahStrDedupQueue* dq) {
   T o = oopDesc::load_heap_oop(p);
   if (! oopDesc::is_null(o)) {
     oop obj = oopDesc::decode_heap_oop_not_null(o);
@@ -254,11 +266,17 @@ inline void ShenandoahConcurrentMark::mark_through_ref(T *p, ShenandoahHeap* hea
     // case we don't need to do anything else.
     if (UPDATE_REFS != CONCURRENT || !oopDesc::is_null(obj)) {
       shenandoah_assert_not_forwarded(p, obj);
-      shenandoah_assert_not_in_cset_except(p, obj, heap->cancelled_concgc());
+      shenandoah_assert_not_in_cset_except(p, obj, heap->cancelled_gc());
 
-      if (heap->mark_next(obj)) {
+      if (mark_context->mark(obj)) {
         bool pushed = q->push(ShenandoahMarkTask(obj));
         assert(pushed, "overflow queue should always succeed pushing");
+
+        if (STRING_DEDUP && ShenandoahStringDedup::is_candidate(obj)) {
+          assert(ShenandoahStringDedup::is_enabled(), "Must be enabled");
+          assert(dq != NULL, "Dedup queue not set");
+          ShenandoahStringDedup::enqueue_candidate(obj, dq);
+        }
       }
 
       shenandoah_assert_marked_next(p, obj);

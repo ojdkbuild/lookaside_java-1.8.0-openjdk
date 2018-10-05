@@ -29,7 +29,7 @@
 #include "gc_implementation/shenandoah/shenandoahTaskqueue.hpp"
 #include "gc_implementation/shenandoah/shenandoahPhaseTimings.hpp"
 
-class ShenandoahConcurrentMark;
+class ShenandoahStrDedupQueue;
 
 class ShenandoahConcurrentMark: public CHeapObj<mtGC> {
 
@@ -52,7 +52,7 @@ private:
   jushort** _liveness_local;
 
 private:
-  template <class T, bool COUNT_LIVENESS>
+  template <class T>
   inline void do_task(ShenandoahObjToScanQueue* q, T* cl, jushort* live_data, ShenandoahMarkTask* task);
 
   template <class T>
@@ -65,48 +65,23 @@ private:
   inline void count_liveness_humongous(oop obj);
 
   // Actual mark loop with closures set up
-  template <class T, bool CANCELLABLE, bool DRAIN_SATB, bool COUNT_LIVENESS>
+  template <class T, bool CANCELLABLE>
   void mark_loop_work(T* cl, jushort* live_data, uint worker_id, ParallelTaskTerminator *t);
 
-  template <bool CANCELLABLE, bool DRAIN_SATB, bool COUNT_LIVENESS>
-  void mark_loop_prework(uint w, ParallelTaskTerminator *t, ReferenceProcessor *rp,
-                         bool class_unload, bool update_refs);
-
-  // ------------------------ Currying dynamic arguments to template args ----------------------------
-
-  template <bool CANCELLABLE, bool DRAIN_SATB>
-  void mark_loop_2(uint w, ParallelTaskTerminator* t, ReferenceProcessor* rp,
-                   bool count_liveness,
-                   bool class_unload, bool update_refs) {
-    if (count_liveness) {
-      mark_loop_prework<CANCELLABLE, DRAIN_SATB, true>(w, t, rp, class_unload, update_refs);
-    } else {
-      mark_loop_prework<CANCELLABLE, DRAIN_SATB, false>(w, t, rp, class_unload, update_refs);
-    }
-  };
-
   template <bool CANCELLABLE>
-  void mark_loop_1(uint w, ParallelTaskTerminator* t, ReferenceProcessor* rp,
-                   bool drain_satb, bool count_liveness,
-                   bool class_unload, bool update_refs) {
-    if (drain_satb) {
-      mark_loop_2<CANCELLABLE, true>(w, t, rp, count_liveness, class_unload, update_refs);
-    } else {
-      mark_loop_2<CANCELLABLE, false>(w, t, rp, count_liveness, class_unload, update_refs);
-    }
-  };
+  void mark_loop_prework(uint worker_id, ParallelTaskTerminator *terminator, ReferenceProcessor *rp,
+                         bool class_unload, bool update_refs, bool strdedup);
 
-  // ------------------------ END: Currying dynamic arguments to template args ----------------------------
 public:
   // Mark loop entry.
   // Translates dynamic arguments to template parameters with progressive currying.
   void mark_loop(uint worker_id, ParallelTaskTerminator* terminator, ReferenceProcessor *rp,
-                 bool cancellable, bool drain_satb, bool count_liveness,
-                 bool class_unload, bool update_refs) {
+                 bool cancellable,
+                 bool class_unload, bool update_refs, bool strdedup) {
     if (cancellable) {
-      mark_loop_1<true>(worker_id, terminator, rp, drain_satb, count_liveness, class_unload, update_refs);
+      mark_loop_prework<true>(worker_id, terminator, rp, class_unload, update_refs, strdedup);
     } else {
-      mark_loop_1<false>(worker_id, terminator, rp, drain_satb, count_liveness, class_unload, update_refs);
+      mark_loop_prework<false>(worker_id, terminator, rp, class_unload, update_refs, strdedup);
     }
   }
 
@@ -120,7 +95,10 @@ public:
   void clear_claim_codecache();
 
   template<class T, UpdateRefsMode UPDATE_REFS>
-  static inline void mark_through_ref(T* p, ShenandoahHeap* heap, ShenandoahObjToScanQueue* q);
+  static inline void mark_through_ref(T* p, ShenandoahHeap* heap, ShenandoahObjToScanQueue* q, ShenandoahMarkingContext* const mark_context);
+
+  template<class T, UpdateRefsMode UPDATE_REFS, bool STRING_DEDUP>
+  static inline void mark_through_ref(T* p, ShenandoahHeap* heap, ShenandoahObjToScanQueue* q, ShenandoahMarkingContext* const mark_context, ShenandoahStrDedupQueue* dq = NULL);
 
   void mark_from_roots();
 
@@ -139,8 +117,6 @@ public:
   ShenandoahObjToScanQueue* get_queue(uint worker_id);
   void clear_queue(ShenandoahObjToScanQueue *q);
 
-  inline bool try_draining_satb_buffer(ShenandoahObjToScanQueue *q, ShenandoahMarkTask &task);
-  void drain_satb_buffers(uint worker_id, bool remark = false);
   ShenandoahObjToScanQueueSet* task_queues() { return _task_queues;}
 
   jushort* get_liveness(uint worker_id);
@@ -154,13 +130,6 @@ private:
 
   void weak_refs_work(bool full_gc);
   void weak_refs_work_doit(bool full_gc);
-
-#if TASKQUEUE_STATS
-  static void print_taskqueue_stats_hdr(outputStream* const st);
-  void print_taskqueue_stats() const;
-  void reset_taskqueue_stats();
-#endif // TASKQUEUE_STATS
-
 };
 
 #endif // SHARE_VM_GC_SHENANDOAH_SHENANDOAHCONCURRENTMARK_HPP

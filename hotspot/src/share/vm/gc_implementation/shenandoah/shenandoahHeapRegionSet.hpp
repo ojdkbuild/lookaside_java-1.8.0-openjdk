@@ -32,25 +32,25 @@ class ShenandoahHeapRegionSet;
 
 class ShenandoahHeapRegionSetIterator : public StackObj {
 private:
-  const ShenandoahHeapRegionSet* const _set;
+  const ShenandoahHeapRegionSet* _set;
   volatile jint _current_index;
   ShenandoahHeap* const _heap;
 
-  // No implicit copying: iterators should be passed by reference to capture the state,
-  // or be copied explicitly by "=" operator
+  // No implicit copying: iterators should be passed by reference to capture the state
   ShenandoahHeapRegionSetIterator(const ShenandoahHeapRegionSetIterator& that);
+  ShenandoahHeapRegionSetIterator& operator=(const ShenandoahHeapRegionSetIterator& o);
 
 public:
   ShenandoahHeapRegionSetIterator(const ShenandoahHeapRegionSet* const set);
 
-  ShenandoahHeapRegionSetIterator& operator=(const ShenandoahHeapRegionSetIterator& o);
+  // Reset existing iterator to new set
+  void reset(const ShenandoahHeapRegionSet* const set);
 
   // MT version
   ShenandoahHeapRegion* claim_next();
 
   // Single-thread version
   ShenandoahHeapRegion* next();
-
 };
 
 class ShenandoahHeapRegionSet : public CHeapObj<mtGC> {
@@ -58,7 +58,9 @@ class ShenandoahHeapRegionSet : public CHeapObj<mtGC> {
 private:
   ShenandoahHeap* const _heap;
   size_t const          _map_size;
+  size_t const          _region_size_bytes_shift;
   jbyte* const          _set_map;
+  // Bias set map's base address for fast test if an oop is in set
   jbyte* const          _biased_set_map;
   size_t                _region_count;
 

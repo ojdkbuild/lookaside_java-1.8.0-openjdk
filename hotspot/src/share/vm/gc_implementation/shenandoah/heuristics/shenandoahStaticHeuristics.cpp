@@ -35,13 +35,6 @@ ShenandoahStaticHeuristics::ShenandoahStaticHeuristics() : ShenandoahHeuristics(
   SHENANDOAH_ERGO_OVERRIDE_DEFAULT(ShenandoahImmediateThreshold, 1);
 }
 
-void ShenandoahStaticHeuristics::print_thresholds() {
-  log_info(gc, init)("Shenandoah heuristics thresholds: allocation "SIZE_FORMAT", free "SIZE_FORMAT", garbage "SIZE_FORMAT,
-                     ShenandoahAllocationThreshold,
-                     ShenandoahFreeThreshold,
-                     ShenandoahGarbageThreshold);
-}
-
 ShenandoahStaticHeuristics::~ShenandoahStaticHeuristics() {}
 
 bool ShenandoahStaticHeuristics::should_start_normal_gc() const {
@@ -50,27 +43,13 @@ bool ShenandoahStaticHeuristics::should_start_normal_gc() const {
   size_t capacity = heap->capacity();
   size_t available = heap->free_set()->available();
   size_t threshold_available = (capacity * ShenandoahFreeThreshold) / 100;
-  size_t threshold_bytes_allocated = heap->capacity() * ShenandoahAllocationThreshold / 100;
-  size_t bytes_allocated = heap->bytes_allocated_since_gc_start();
 
-  double last_time_ms = (os::elapsedTime() - _last_cycle_end) * 1000;
-  bool periodic_gc = (last_time_ms > ShenandoahGuaranteedGCInterval);
-
-  if (available < threshold_available &&
-      bytes_allocated > threshold_bytes_allocated) {
-    // Need to check that an appropriate number of regions have
-    // been allocated since last concurrent mark too.
-    log_info(gc,ergo)("Concurrent marking triggered. Free: " SIZE_FORMAT "M, Free Threshold: " SIZE_FORMAT
-                              "M; Allocated: " SIZE_FORMAT "M, Alloc Threshold: " SIZE_FORMAT "M",
-                      available / M, threshold_available / M, bytes_allocated / M, threshold_bytes_allocated / M);
-    return true;
-  } else if (periodic_gc) {
-    log_info(gc,ergo)("Periodic GC triggered. Time since last GC: %.0f ms, Guaranteed Interval: " UINTX_FORMAT " ms",
-                      last_time_ms, ShenandoahGuaranteedGCInterval);
+  if (available < threshold_available) {
+    log_info(gc)("Trigger: Free (" SIZE_FORMAT "M) is below free threshold (" SIZE_FORMAT "M)",
+                 available / M, threshold_available / M);
     return true;
   }
-
-  return false;
+  return ShenandoahHeuristics::should_start_normal_gc();
 }
 
 void ShenandoahStaticHeuristics::choose_collection_set_from_regiondata(ShenandoahCollectionSet* cset,
@@ -87,7 +66,7 @@ void ShenandoahStaticHeuristics::choose_collection_set_from_regiondata(Shenandoa
 }
 
 const char* ShenandoahStaticHeuristics::name() {
-  return "dynamic";
+  return "static";
 }
 
 bool ShenandoahStaticHeuristics::is_diagnostic() {

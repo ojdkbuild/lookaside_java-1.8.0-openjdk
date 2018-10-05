@@ -57,7 +57,7 @@ bool ShenandoahFreeSet::is_collector_free(size_t idx) const {
   return _collector_free_bitmap.at(idx);
 }
 
-HeapWord* ShenandoahFreeSet::allocate_single(size_t word_size, ShenandoahHeap::AllocType type, bool& in_new_region) {
+HeapWord* ShenandoahFreeSet::allocate_single(ShenandoahHeap::ShenandoahAllocationRequest& req, bool& in_new_region) {
   // Scan the bitmap looking for a first fit.
   //
   // Leftmost and rightmost bounds provide enough caching to walk bitmap efficiently. Normally,
@@ -70,71 +70,51 @@ HeapWord* ShenandoahFreeSet::allocate_single(size_t word_size, ShenandoahHeap::A
   // Free set maintains mutator and collector views, and normally they allocate in their views only,
   // unless we special cases for stealing and mixed allocations.
 
-  switch (type) {
+  switch (req.type()) {
     case ShenandoahHeap::_alloc_tlab:
     case ShenandoahHeap::_alloc_shared: {
 
-      // Fast-path: try to allocate in the mutator view first:
+      // Try to allocate in the mutator view
       for (size_t idx = _mutator_leftmost; idx <= _mutator_rightmost; idx++) {
         if (is_mutator_free(idx)) {
-          HeapWord* result = try_allocate_in(_heap->get_region(idx), word_size, type, in_new_region);
+          HeapWord* result = try_allocate_in(_heap->get_region(idx), req, in_new_region);
           if (result != NULL) {
             return result;
           }
         }
       }
 
-      // Recovery: try to steal the empty region from the collector view:
-      for (size_t idx = _collector_leftmost; idx <= _collector_rightmost; idx++) {
-        if (is_collector_free(idx)) {
-          ShenandoahHeapRegion* r = _heap->get_region(idx);
-          if (is_empty_or_trash(r)) {
-            flip_to_mutator(idx);
-            HeapWord *result = try_allocate_in(r, word_size, type, in_new_region);
-            if (result != NULL) {
-              return result;
-            }
-          }
-        }
-      }
-
-      // Recovery: try to mix the allocation into the collector view:
-      if (ShenandoahAllowMixedAllocs) {
-        for (size_t idx = _collector_leftmost; idx <= _collector_rightmost; idx++) {
-          if (is_collector_free(idx)) {
-            HeapWord* result = try_allocate_in(_heap->get_region(idx), word_size, type, in_new_region);
-            if (result != NULL) {
-              return result;
-            }
-          }
-        }
-      }
-
+      // There is no recovery. Mutator does not touch collector view at all.
       break;
     }
     case ShenandoahHeap::_alloc_gclab:
     case ShenandoahHeap::_alloc_shared_gc: {
       // size_t is unsigned, need to dodge underflow when _leftmost = 0
 
-      // Fast-path: try to allocate in the collector view first:
+      // Fast-path: try to allocate in the collector view first
       for (size_t c = _collector_rightmost + 1; c > _collector_leftmost; c--) {
         size_t idx = c - 1;
         if (is_collector_free(idx)) {
-          HeapWord* result = try_allocate_in(_heap->get_region(idx), word_size, type, in_new_region);
+          HeapWord* result = try_allocate_in(_heap->get_region(idx), req, in_new_region);
           if (result != NULL) {
             return result;
           }
         }
       }
 
-      // Recovery: try to steal the empty region from the mutator view:
+      // No dice. Can we borrow space from mutator view?
+      if (!ShenandoahEvacReserveOverflow) {
+        return NULL;
+      }
+
+      // Try to steal the empty region from the mutator view
       for (size_t c = _mutator_rightmost + 1; c > _mutator_leftmost; c--) {
         size_t idx = c - 1;
         if (is_mutator_free(idx)) {
           ShenandoahHeapRegion* r = _heap->get_region(idx);
           if (is_empty_or_trash(r)) {
-            flip_to_gc(idx);
-            HeapWord *result = try_allocate_in(r, word_size, type, in_new_region);
+            flip_to_gc(r);
+            HeapWord *result = try_allocate_in(r, req, in_new_region);
             if (result != NULL) {
               return result;
             }
@@ -142,19 +122,18 @@ HeapWord* ShenandoahFreeSet::allocate_single(size_t word_size, ShenandoahHeap::A
         }
       }
 
-      // Recovery: try to mix the allocation into the mutator view:
+      // Try to mix the allocation into the mutator view:
       if (ShenandoahAllowMixedAllocs) {
         for (size_t c = _mutator_rightmost + 1; c > _mutator_leftmost; c--) {
           size_t idx = c - 1;
           if (is_mutator_free(idx)) {
-            HeapWord* result = try_allocate_in(_heap->get_region(idx), word_size, type, in_new_region);
+            HeapWord* result = try_allocate_in(_heap->get_region(idx), req, in_new_region);
             if (result != NULL) {
               return result;
             }
           }
         }
       }
-
       break;
     }
     default:
@@ -164,19 +143,37 @@ HeapWord* ShenandoahFreeSet::allocate_single(size_t word_size, ShenandoahHeap::A
   return NULL;
 }
 
-HeapWord* ShenandoahFreeSet::try_allocate_in(ShenandoahHeapRegion* r, size_t word_size, ShenandoahHeap::AllocType type, bool& in_new_region) {
+HeapWord* ShenandoahFreeSet::try_allocate_in(ShenandoahHeapRegion* r, ShenandoahHeap::ShenandoahAllocationRequest& req, bool& in_new_region) {
   assert (!has_no_alloc_capacity(r), err_msg("Performance: should avoid full regions on this path: " SIZE_FORMAT, r->region_number()));
 
   try_recycle_trashed(r);
 
   in_new_region = r->is_empty();
 
-  HeapWord* result = r->allocate(word_size, type);
+  HeapWord* result = NULL;
+  size_t size = req.size();
+
+  if (ShenandoahElasticTLAB && req.is_lab_alloc()) {
+    size_t free = align_size_down(r->free() >> LogHeapWordSize, MinObjAlignment);
+    if (size > free) {
+      size = free;
+    }
+    if (size >= req.min_size()) {
+      result = r->allocate(size, req.type());
+      assert (result != NULL, err_msg("Allocation must succeed: free " SIZE_FORMAT ", actual " SIZE_FORMAT, free, size));
+    }
+  } else {
+    result = r->allocate(size, req.type());
+  }
 
   if (result != NULL) {
-    // Allocation successful, bump live data stats:
-    r->increase_live_data_alloc_words(word_size);
-    increase_used(word_size * HeapWordSize);
+    // Allocation successful, bump stats:
+    if (req.is_mutator_alloc()) {
+      increase_used(size * HeapWordSize);
+    }
+
+    // Record actual allocation size
+    req.set_actual_size(size);
   }
 
   if (result == NULL || has_no_alloc_capacity(r)) {
@@ -188,10 +185,12 @@ HeapWord* ShenandoahFreeSet::try_allocate_in(ShenandoahHeapRegion* r, size_t wor
     // TODO: Record first fully-empty region, and use that for large allocations
 
     // Record the remainder as allocation waste
-    size_t waste = r->free();
-    if (waste > 0) {
-      increase_used(waste);
-      _heap->notify_alloc(waste, true);
+    if (req.is_mutator_alloc()) {
+      size_t waste = r->free();
+      if (waste > 0) {
+        increase_used(waste);
+        _heap->notify_mutator_alloc_words(waste >> LogHeapWordSize, true);
+      }
     }
 
     size_t num = r->region_number();
@@ -208,6 +207,17 @@ HeapWord* ShenandoahFreeSet::try_allocate_in(ShenandoahHeapRegion* r, size_t wor
 
 bool ShenandoahFreeSet::touches_bounds(size_t num) const {
   return num == _collector_leftmost || num == _collector_rightmost || num == _mutator_leftmost || num == _mutator_rightmost;
+}
+
+void ShenandoahFreeSet::recompute_bounds() {
+  // Reset to the most pessimistic case:
+  _mutator_rightmost = _max - 1;
+  _mutator_leftmost = 0;
+  _collector_rightmost = _max - 1;
+  _collector_leftmost = 0;
+
+  // ...and adjust from there
+  adjust_bounds();
 }
 
 void ShenandoahFreeSet::adjust_bounds() {
@@ -227,9 +237,10 @@ void ShenandoahFreeSet::adjust_bounds() {
   }
 }
 
-HeapWord* ShenandoahFreeSet::allocate_contiguous(size_t words_size) {
+HeapWord* ShenandoahFreeSet::allocate_contiguous(ShenandoahHeap::ShenandoahAllocationRequest& req) {
   assert_heaplock_owned_by_current_thread();
 
+  size_t words_size = req.size();
   size_t num = ShenandoahHeapRegion::required_regions(words_size * HeapWordSize);
 
   // No regions left to satisfy allocation, bye.
@@ -292,8 +303,6 @@ HeapWord* ShenandoahFreeSet::allocate_contiguous(size_t words_size) {
     r->set_top(r->bottom() + used_words);
     r->reset_alloc_metadata_to_shared();
 
-    r->increase_live_data_alloc_words(used_words);
-
     _mutator_free_bitmap.clear_bit(r->region_number());
   }
 
@@ -303,7 +312,7 @@ HeapWord* ShenandoahFreeSet::allocate_contiguous(size_t words_size) {
 
   if (remainder != 0) {
     // Record this remainder as allocation waste
-    _heap->notify_alloc(ShenandoahHeapRegion::region_size_words() - remainder, true);
+    _heap->notify_mutator_alloc_words(ShenandoahHeapRegion::region_size_words() - remainder, true);
   }
 
   // Allocated at left/rightmost? Move the bounds appropriately.
@@ -312,6 +321,7 @@ HeapWord* ShenandoahFreeSet::allocate_contiguous(size_t words_size) {
   }
   assert_bounds();
 
+  req.set_actual_size(words_size);
   return _heap->get_region(beg)->bottom();
 }
 
@@ -353,22 +363,19 @@ void ShenandoahFreeSet::recycle_trash() {
   }
 }
 
-void ShenandoahFreeSet::flip_to_gc(size_t idx) {
+void ShenandoahFreeSet::flip_to_gc(ShenandoahHeapRegion* r) {
+  size_t idx = r->region_number();
+
+  assert(_mutator_free_bitmap.at(idx), "Should be in mutator view");
+  assert(is_empty_or_trash(r), "Should not be allocated");
+
   _mutator_free_bitmap.clear_bit(idx);
   _collector_free_bitmap.set_bit(idx);
   _collector_leftmost = MIN2(idx, _collector_leftmost);
   _collector_rightmost = MAX2(idx, _collector_rightmost);
-  if (touches_bounds(idx)) {
-    adjust_bounds();
-  }
-  assert_bounds();
-}
 
-void ShenandoahFreeSet::flip_to_mutator(size_t idx) {
-  _collector_free_bitmap.clear_bit(idx);
-  _mutator_free_bitmap.set_bit(idx);
-  _mutator_leftmost = MIN2(idx, _mutator_leftmost);
-  _mutator_rightmost = MAX2(idx, _mutator_rightmost);
+  _capacity -= alloc_capacity(r);
+
   if (touches_bounds(idx)) {
     adjust_bounds();
   }
@@ -408,33 +415,38 @@ void ShenandoahFreeSet::rebuild() {
 
       assert(!is_mutator_free(idx), "We are about to add it, it shouldn't be there already");
       _mutator_free_bitmap.set_bit(idx);
-      _mutator_leftmost  = MIN2(_mutator_leftmost, idx);
-      _mutator_rightmost = MAX2(_mutator_rightmost, idx);
     }
   }
 
+  // Evac reserve: reserve trailing space for evacuations
+  size_t to_reserve = ShenandoahEvacReserve * _heap->capacity() / 100;
+  size_t reserved = 0;
+
+  for (size_t idx = _heap->num_regions() - 1; idx > 0; idx--) {
+    if (reserved >= to_reserve) break;
+
+    ShenandoahHeapRegion* region = _heap->get_region(idx);
+    if (_mutator_free_bitmap.at(idx) && is_empty_or_trash(region)) {
+      _mutator_free_bitmap.clear_bit(idx);
+      _collector_free_bitmap.set_bit(idx);
+      size_t ac = alloc_capacity(region);
+      _capacity -= ac;
+      reserved += ac;
+    }
+  }
+
+  recompute_bounds();
   assert_bounds();
-  log_status();
 }
 
 void ShenandoahFreeSet::log_status() {
-  log_info(gc, ergo)("Free: " SIZE_FORMAT "M, Regions: " SIZE_FORMAT " mutator, " SIZE_FORMAT " collector",
-                     capacity() / M, mutator_count(), collector_count());
-}
-
-void ShenandoahFreeSet::log_status_verbose() {
   assert_heaplock_owned_by_current_thread();
 
   if (ShenandoahLogInfo || PrintGCDetails) {
     ResourceMark rm;
     outputStream* ls = gclog_or_tty;
 
-    ls->print_cr("Free set: Used: " SIZE_FORMAT "M of " SIZE_FORMAT "M, Regions: " SIZE_FORMAT " mutator, " SIZE_FORMAT " collector",
-                used() / M, capacity() / M, mutator_count(), collector_count());
-
     {
-      ls->print("Free set: Mutator view: ");
-
       size_t last_idx = 0;
       size_t max = 0;
       size_t max_contig = 0;
@@ -446,7 +458,7 @@ void ShenandoahFreeSet::log_status_verbose() {
       for (size_t idx = _mutator_leftmost; idx <= _mutator_rightmost; idx++) {
         if (is_mutator_free(idx)) {
           ShenandoahHeapRegion *r = _heap->get_region(idx);
-          size_t free = r->free();
+          size_t free = alloc_capacity(r);
 
           max = MAX2(max, free);
 
@@ -467,7 +479,8 @@ void ShenandoahFreeSet::log_status_verbose() {
       size_t max_humongous = max_contig * ShenandoahHeapRegion::region_size_bytes();
       size_t free = capacity() - used();
 
-      ls->print("Max regular: " SIZE_FORMAT "K, Max humongous: " SIZE_FORMAT "K, ", max / K, max_humongous / K);
+      ls->print("Free: " SIZE_FORMAT "M (" SIZE_FORMAT " regions), Max regular: " SIZE_FORMAT "K, Max humongous: " SIZE_FORMAT "K, ",
+               total_free / M, mutator_count(), max / K, max_humongous / K);
 
       size_t frag_ext;
       if (free > 0) {
@@ -488,44 +501,46 @@ void ShenandoahFreeSet::log_status_verbose() {
     }
 
     {
-      ls->print("Free set: Collector view: ");
-
       size_t max = 0;
+      size_t total_free = 0;
+
       for (size_t idx = _collector_leftmost; idx <= _collector_rightmost; idx++) {
         if (is_collector_free(idx)) {
           ShenandoahHeapRegion *r = _heap->get_region(idx);
-          max = MAX2(max, r->free());
+          size_t free = alloc_capacity(r);
+          max = MAX2(max, free);
+          total_free += free;
         }
       }
 
-      ls->print("Max regular: " SIZE_FORMAT "K", max / K);
-      ls->cr();
+      ls->print_cr("Evacuation Reserve: " SIZE_FORMAT "M (" SIZE_FORMAT " regions), Max regular: " SIZE_FORMAT "K",
+                  total_free / M, collector_count(), max / K);
     }
   }
 }
 
-HeapWord* ShenandoahFreeSet::allocate(size_t word_size, ShenandoahHeap::AllocType type, bool& in_new_region) {
+HeapWord* ShenandoahFreeSet::allocate(ShenandoahHeap::ShenandoahAllocationRequest& req, bool& in_new_region) {
   assert_heaplock_owned_by_current_thread();
   assert_bounds();
 
-  if (word_size > ShenandoahHeapRegion::humongous_threshold_words()) {
-    switch (type) {
+  if (req.size() > ShenandoahHeapRegion::humongous_threshold_words()) {
+    switch (req.type()) {
       case ShenandoahHeap::_alloc_shared:
       case ShenandoahHeap::_alloc_shared_gc:
         in_new_region = true;
-        return allocate_contiguous(word_size);
+        return allocate_contiguous(req);
       case ShenandoahHeap::_alloc_gclab:
       case ShenandoahHeap::_alloc_tlab:
         in_new_region = false;
-        log_warning(gc)("Trying to allocate TLAB larger than the humongous threshold: " SIZE_FORMAT " > " SIZE_FORMAT,
-                        word_size, ShenandoahHeapRegion::humongous_threshold_words());
+        assert(false, err_msg("Trying to allocate TLAB larger than the humongous threshold: " SIZE_FORMAT " > " SIZE_FORMAT,
+                              req.size(), ShenandoahHeapRegion::humongous_threshold_words()));
         return NULL;
       default:
         ShouldNotReachHere();
         return NULL;
     }
   } else {
-    return allocate_single(word_size, type, in_new_region);
+    return allocate_single(req, in_new_region);
   }
 }
 

@@ -689,16 +689,20 @@ address MacroAssembler::trampoline_call(Address entry, CodeBuffer *cbuf) {
 
   unsigned int start_offset = offset();
 #ifdef COMPILER2
+  // We need a trampoline if branches are far.
   if (far_branches()) {
-    bool is_c2 = is_c2_compile(ciEnv::current()->task()->comp_level());
+    // We don't want to emit a trampoline if C2 is generating dummy
+    // code during its branch shortening phase.
+    CompileTask* task = ciEnv::current()->task();
     bool in_scratch_emit_size =
-      is_c2 && Compile::current()->in_scratch_emit_size();
+      ((task != NULL) && is_c2_compile(task->comp_level())
+       && Compile::current()->in_scratch_emit_size());
     if (! in_scratch_emit_size) {
-    address stub = emit_trampoline_stub(start_offset, entry.target());
-    if (stub == NULL) {
-      return NULL; // CodeCache is full
+      address stub = emit_trampoline_stub(start_offset, entry.target());
+      if (stub == NULL) {
+        return NULL; // CodeCache is full
+      }
     }
-  }
   }
 #endif
 
@@ -3800,17 +3804,23 @@ void MacroAssembler::shenandoah_write_barrier(Register dst) {
 
   Label done;
 
-  // Check for evacuation-in-progress
   Address gc_state(rthread, in_bytes(JavaThread::gc_state_offset()));
   ldrb(rscratch1, gc_state);
 
-  // The read-barrier.
+  // Check for heap stability
+  mov(rscratch2, ShenandoahHeap::HAS_FORWARDED | ShenandoahHeap::EVACUATION);
+  tst(rscratch1, rscratch2);
+  br(Assembler::EQ, done);
+
+  // Heap is unstable, need to perform the read-barrier even if WB is inactive
   if (ShenandoahWriteBarrierRB) {
     ldr(dst, Address(dst, BrooksPointer::byte_offset()));
   }
 
-  // Evac-check ...
-  tbz(rscratch1, ShenandoahHeap::EVACUATION_BITPOS, done);
+  // Check for evacuation-in-progress and jump to WB slow-path if needed
+  mov(rscratch2, ShenandoahHeap::EVACUATION);
+  tst(rscratch1, rscratch2);
+  br(Assembler::EQ, done);
 
   RegSet to_save = RegSet::of(r0);
   if (dst != r0) {
@@ -5044,22 +5054,4 @@ void MacroAssembler::encode_iso_array(Register src, Register dst,
 
     BIND(DONE);
       sub(result, result, len); // Return index where we stopped
-}
-
-// Shenandoah requires that all objects are evacuated before being
-// written to, and that fromspace pointers are not written into
-// objects during concurrent marking.  These methods check for that.
-
-void MacroAssembler::in_heap_check(Register r, Register tmp, Label &nope) {
-  ShenandoahHeap* h = ShenandoahHeap::heap();
-
-  HeapWord* heap_base = (HeapWord*) h->base();
-  HeapWord* last_region_end = heap_base + ShenandoahHeapRegion::region_size_words_jint() * h->num_regions();
-
-  mov(tmp, (uintptr_t) heap_base);
-  cmp(r, tmp);
-  br(Assembler::LO, nope);
-  mov(tmp, (uintptr_t)last_region_end);
-  cmp(r, tmp);
-  br(Assembler::HS, nope);
 }

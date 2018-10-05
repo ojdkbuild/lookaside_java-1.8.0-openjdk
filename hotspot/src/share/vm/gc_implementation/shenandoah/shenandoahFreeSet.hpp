@@ -50,13 +50,13 @@ private:
   bool is_mutator_free(size_t idx) const;
   bool is_collector_free(size_t idx) const;
 
-  HeapWord* try_allocate_in(ShenandoahHeapRegion* region, size_t word_size, ShenandoahHeap::AllocType type, bool& in_new_region);
-  HeapWord* allocate_single(size_t word_size, ShenandoahHeap::AllocType type, bool& in_new_region);
-  HeapWord* allocate_contiguous(size_t words_size);
+  HeapWord* try_allocate_in(ShenandoahHeapRegion* region, ShenandoahHeap::ShenandoahAllocationRequest& req, bool& in_new_region);
+  HeapWord* allocate_single(ShenandoahHeap::ShenandoahAllocationRequest& req, bool& in_new_region);
+  HeapWord* allocate_contiguous(ShenandoahHeap::ShenandoahAllocationRequest& req);
 
-  void flip_to_mutator(size_t idx);
-  void flip_to_gc(size_t idx);
+  void flip_to_gc(ShenandoahHeapRegion* r);
 
+  void recompute_bounds();
   void adjust_bounds();
   bool touches_bounds(size_t num) const;
 
@@ -81,7 +81,6 @@ public:
   void recycle_trash();
 
   void log_status();
-  void log_status_verbose();
 
   size_t capacity()  const { return _capacity; }
   size_t used()      const { return _used;     }
@@ -90,7 +89,7 @@ public:
     return _capacity - _used;
   }
 
-  HeapWord* allocate(size_t words_size, ShenandoahHeap::AllocType type, bool &in_new_region);
+  HeapWord* allocate(ShenandoahHeap::ShenandoahAllocationRequest& req, bool& in_new_region);
   size_t unsafe_peek_free() const;
   void print_on(outputStream* out) const;
 };

@@ -27,17 +27,20 @@
 #include "gc_implementation/shenandoah/shenandoahBarrierSet.hpp"
 #include "gc_implementation/shenandoah/shenandoahCollectorPolicy.hpp"
 #include "gc_implementation/shenandoah/shenandoahHeap.inline.hpp"
+#include "gc_implementation/shenandoah/shenandoahHeuristics.hpp"
 #include "runtime/interfaceSupport.hpp"
 
 class ShenandoahUpdateRefsForOopClosure: public ExtendedOopClosure {
 private:
   ShenandoahHeap* _heap;
+  ShenandoahBarrierSet* _bs;
+
   template <class T>
   inline void do_oop_work(T* p) {
     _heap->maybe_update_with_forwarded(p);
   }
 public:
-  ShenandoahUpdateRefsForOopClosure() : _heap(ShenandoahHeap::heap()) {
+  ShenandoahUpdateRefsForOopClosure() : _heap(ShenandoahHeap::heap()), _bs(ShenandoahBarrierSet::barrier_set()) {
     assert(UseShenandoahGC && ShenandoahCloneBarrier, "should be enabled");
   }
   void do_oop(oop* p)       { do_oop_work(p); }
@@ -154,14 +157,6 @@ bool ShenandoahBarrierSet::write_prim_needs_barrier(HeapWord* hw, size_t s, juin
   return false;
 }
 
-bool ShenandoahBarrierSet::need_update_refs_barrier() {
-  if (_heap->shenandoahPolicy()->update_refs()) {
-    return _heap->is_update_refs_in_progress();
-  } else {
-    return _heap->is_concurrent_mark_in_progress() && _heap->has_forwarded_objects();
-  }
-}
-
 void ShenandoahBarrierSet::write_ref_array_work(MemRegion r) {
   ShouldNotReachHere();
 }
@@ -169,7 +164,6 @@ void ShenandoahBarrierSet::write_ref_array_work(MemRegion r) {
 template <class T>
 void ShenandoahBarrierSet::write_ref_array_loop(HeapWord* start, size_t count) {
   assert(UseShenandoahGC && ShenandoahCloneBarrier, "Should be enabled");
-  ShenandoahEvacOOMScope oom_evac_scope;
   ShenandoahUpdateRefsForOopClosure cl;
   T* dst = (T*) start;
   for (size_t i = 0; i < count; i++) {
@@ -182,6 +176,7 @@ void ShenandoahBarrierSet::write_ref_array(HeapWord* start, size_t count) {
   if (!ShenandoahCloneBarrier) return;
   if (!need_update_refs_barrier()) return;
 
+  ShenandoahEvacOOMScope oom_evac_scope;
   if (UseCompressedOops) {
     write_ref_array_loop<narrowOop>(start, count);
   } else {
@@ -193,14 +188,14 @@ template <class T>
 void ShenandoahBarrierSet::write_ref_array_pre_work(T* dst, size_t count) {
   assert (UseShenandoahGC && ShenandoahSATBBarrier, "Should be enabled");
 
-  shenandoah_assert_not_in_cset_loc_except(dst, _heap->cancelled_concgc());
+  shenandoah_assert_not_in_cset_loc_except(dst, _heap->cancelled_gc());
 
   if (! JavaThread::satb_mark_queue_set().is_active()) return;
   T* elem_ptr = dst;
   for (size_t i = 0; i < count; i++, elem_ptr++) {
     T heap_oop = oopDesc::load_heap_oop(elem_ptr);
     if (!oopDesc::is_null(heap_oop)) {
-      G1SATBCardTableModRefBS::enqueue(oopDesc::decode_heap_oop_not_null(heap_oop));
+      enqueue(oopDesc::decode_heap_oop_not_null(heap_oop));
     }
   }
 }
@@ -221,10 +216,10 @@ template <class T>
 void ShenandoahBarrierSet::write_ref_field_pre_static(T* field, oop newVal) {
   T heap_oop = oopDesc::load_heap_oop(field);
 
-  shenandoah_assert_not_in_cset_loc_except(field, ShenandoahHeap::heap()->cancelled_concgc());
+  shenandoah_assert_not_in_cset_loc_except(field, ShenandoahHeap::heap()->cancelled_gc());
 
   if (!oopDesc::is_null(heap_oop)) {
-    G1SATBCardTableModRefBS::enqueue(oopDesc::decode_heap_oop(heap_oop));
+    ShenandoahBarrierSet::barrier_set()->enqueue(oopDesc::decode_heap_oop(heap_oop));
   }
 }
 
@@ -247,9 +242,9 @@ void ShenandoahBarrierSet::write_ref_field_pre_work(void* field, oop new_val) {
 }
 
 void ShenandoahBarrierSet::write_ref_field_work(void* v, oop o, bool release) {
-  shenandoah_assert_not_in_cset_loc_except(v, _heap->cancelled_concgc());
-  shenandoah_assert_not_forwarded_except  (v, o, o == NULL || _heap->cancelled_concgc() || !_heap->is_concurrent_mark_in_progress());
-  shenandoah_assert_not_in_cset_except    (v, o, o == NULL || _heap->cancelled_concgc() || !_heap->is_concurrent_mark_in_progress());
+  shenandoah_assert_not_in_cset_loc_except(v, _heap->cancelled_gc());
+  shenandoah_assert_not_forwarded_except  (v, o, o == NULL || _heap->cancelled_gc() || !_heap->is_concurrent_mark_in_progress());
+  shenandoah_assert_not_in_cset_except    (v, o, o == NULL || _heap->cancelled_gc() || !_heap->is_concurrent_mark_in_progress());
 }
 
 void ShenandoahBarrierSet::write_region_work(MemRegion mr) {
@@ -264,7 +259,7 @@ void ShenandoahBarrierSet::write_region_work(MemRegion mr) {
 
   ShenandoahEvacOOMScope oom_evac_scope;
   oop obj = oop(mr.start());
-  assert(obj->is_oop(), "must be an oop");
+  shenandoah_assert_correct(NULL, obj);
   ShenandoahUpdateRefsForOopClosure cl;
   obj->oop_iterate(&cl);
 }
@@ -297,14 +292,59 @@ bool ShenandoahBarrierSet::obj_equals(narrowOop obj1, narrowOop obj2) {
 }
 
 JRT_LEAF(oopDesc*, ShenandoahBarrierSet::write_barrier_JRT(oopDesc* src))
-  oop result = ((ShenandoahBarrierSet*)oopDesc::bs())->write_barrier(src);
+  oop result = ShenandoahBarrierSet::barrier_set()->write_barrier_mutator(src);
   return (oopDesc*) result;
 JRT_END
 
 IRT_LEAF(oopDesc*, ShenandoahBarrierSet::write_barrier_IRT(oopDesc* src))
-  oop result = ((ShenandoahBarrierSet*)oopDesc::bs())->write_barrier(src);
+  oop result = ShenandoahBarrierSet::barrier_set()->write_barrier_mutator(src);
   return (oopDesc*) result;
 IRT_END
+
+oop ShenandoahBarrierSet::write_barrier_mutator(oop obj) {
+  assert(UseShenandoahGC && ShenandoahWriteBarrier, "should be enabled");
+  assert(_heap->is_gc_in_progress_mask(ShenandoahHeap::EVACUATION), "evac should be in progress");
+  shenandoah_assert_in_cset(NULL, obj);
+
+  oop fwd = resolve_forwarded_not_null(obj);
+  if (oopDesc::unsafe_equals(obj, fwd)) {
+    ShenandoahEvacOOMScope oom_evac_scope;
+    bool evac;
+
+    Thread* thread = Thread::current();
+    oop res_oop = _heap->evacuate_object(obj, thread, evac);
+
+    // Since we are already here and paid the price of getting through runtime call adapters
+    // and acquiring oom-scope, it makes sense to try and evacuate more adjacent objects,
+    // thus amortizing the overhead. For sparsely live heaps, scan costs easily dominate
+    // total assist costs, and can introduce a lot of evacuation latency. This is why we
+    // only scan for _nearest_ N objects, regardless if they are eligible for evac or not.
+    // The scan itself should also avoid touching the non-marked objects below TAMS, because
+    // their metadata (notably, klasses) may be incorrect already.
+
+    size_t max = ShenandoahEvacAssist;
+    if (max > 0) {
+      ShenandoahMarkingContext* ctx = _heap->complete_marking_context();
+
+      ShenandoahHeapRegion* r = _heap->heap_region_containing(obj);
+      assert(r->is_cset(), "sanity");
+
+      HeapWord* cur = (HeapWord*)obj + obj->size() + BrooksPointer::word_size();
+
+      size_t count = 0;
+      while ((cur < r->top()) && ctx->is_marked(oop(cur)) && (count++ < max)) {
+        oop cur_oop = oop(cur);
+        if (oopDesc::unsafe_equals(cur_oop, resolve_forwarded_not_null(cur_oop))) {
+          _heap->evacuate_object(cur_oop, thread, evac);
+        }
+        cur = cur + cur_oop->size() + BrooksPointer::word_size();
+      }
+    }
+
+    return res_oop;
+  }
+  return fwd;
+}
 
 oop ShenandoahBarrierSet::write_barrier(oop obj) {
   if (ShenandoahWriteBarrier) {
@@ -314,9 +354,14 @@ oop ShenandoahBarrierSet::write_barrier(oop obj) {
       if (evac_in_progress &&
           _heap->in_collection_set(obj) &&
           oopDesc::unsafe_equals(obj, fwd)) {
-        ShenandoahEvacOOMScope oom_evac_scope;
+        Thread *t = Thread::current();
         bool evac;
-        return _heap->evacuate_object(obj, Thread::current(), evac);
+        if (t->is_Worker_thread()) {
+          return _heap->evacuate_object(obj, t, evac);
+        } else {
+          ShenandoahEvacOOMScope oom_evac_scope;
+          return _heap->evacuate_object(obj, t, evac);
+        }
       } else {
         return fwd;
       }
@@ -325,12 +370,11 @@ oop ShenandoahBarrierSet::write_barrier(oop obj) {
   return obj;
 }
 
-#ifdef ASSERT
-void ShenandoahBarrierSet::verify_safe_oop(oop p) {
-  shenandoah_assert_not_in_cset_except(NULL, p, (p == NULL) || ShenandoahHeap::heap()->cancelled_concgc());
-}
+void ShenandoahBarrierSet::enqueue(oop obj) {
+  // Filter marked objects before hitting the SATB queues. The same predicate would
+  // be used by SATBMQ::filter to eliminate already marked objects downstream, but
+  // filtering here helps to avoid wasteful SATB queueing work to begin with.
+  if (!_heap->requires_marking(obj)) return;
 
-void ShenandoahBarrierSet::verify_safe_oop(narrowOop p) {
-  verify_safe_oop(oopDesc::decode_heap_oop(p));
+  G1SATBCardTableModRefBS::enqueue(obj);
 }
-#endif

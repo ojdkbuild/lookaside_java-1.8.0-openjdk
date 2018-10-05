@@ -37,6 +37,12 @@ public:
 
   ShenandoahBarrierSet(ShenandoahHeap* heap);
 
+  inline static ShenandoahBarrierSet* barrier_set() {
+    BarrierSet *bs = oopDesc::bs();
+    assert(bs->kind() == BarrierSet::ShenandoahBarrierSet, "sanity");
+    return (ShenandoahBarrierSet*)bs;
+  }
+
   void print_on(outputStream* st) const;
 
   bool is_a(BarrierSet::Name bsn);
@@ -100,16 +106,15 @@ public:
   static oopDesc* write_barrier_IRT(oopDesc* src);
   static oopDesc* write_barrier_JRT(oopDesc* src);
 
+  oop write_barrier_mutator(oop obj);
+
   bool obj_equals(oop obj1, oop obj2);
   bool obj_equals(narrowOop obj1, narrowOop obj2);
 
-#ifdef ASSERT
-  virtual void verify_safe_oop(oop p);
-  virtual void verify_safe_oop(narrowOop p);
-#endif
+  void enqueue(oop obj);
 
 private:
-  bool need_update_refs_barrier();
+  inline bool need_update_refs_barrier();
 
   template <class T>
   void write_ref_array_loop(HeapWord* start, size_t count);

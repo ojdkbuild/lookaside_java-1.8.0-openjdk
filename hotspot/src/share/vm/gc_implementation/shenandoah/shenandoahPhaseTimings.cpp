@@ -27,10 +27,13 @@
 #include "gc_implementation/shenandoah/shenandoahPhaseTimings.hpp"
 #include "gc_implementation/shenandoah/shenandoahHeap.hpp"
 #include "gc_implementation/shenandoah/shenandoahWorkerDataArray.hpp"
+#include "gc_implementation/shenandoah/shenandoahHeuristics.hpp"
 #include "utilities/ostream.hpp"
 
 ShenandoahPhaseTimings::ShenandoahPhaseTimings() : _policy(NULL) {
-  _worker_times = new ShenandoahWorkerTimings((uint)MAX2(ConcGCThreads, ParallelGCThreads));
+  uint max_workers = (uint)MAX2(ConcGCThreads, ParallelGCThreads);
+  _worker_times = new ShenandoahWorkerTimings(max_workers);
+  _termination_times = new ShenandoahTerminationTimings(max_workers);
   _policy = ShenandoahHeap::heap()->shenandoahPolicy();
   assert(_policy != NULL, "Can not be NULL");
   init_phase_names();
@@ -47,7 +50,7 @@ void ShenandoahPhaseTimings::record_phase_end(Phase phase) {
   if (!_policy->is_at_shutdown()) {
     _timing_data[phase]._secs.add(elapsed);
   }
-  _policy->record_phase_time(phase, elapsed);
+  ShenandoahHeap::heap()->heuristics()->record_phase_time(phase, elapsed);
 }
 
 void ShenandoahPhaseTimings::record_phase_time(Phase phase, jint time_us) {
@@ -72,7 +75,6 @@ void ShenandoahPhaseTimings::record_workers_end(Phase phase) {
   guarantee(phase == init_evac ||
             phase == scan_roots ||
             phase == update_roots ||
-            phase == partial_gc_work ||
             phase == final_update_refs_roots ||
             phase == full_gc_roots ||
             phase == _num_phases,
@@ -104,7 +106,7 @@ void ShenandoahPhaseTimings::print_on(outputStream* out) const {
 }
 
 void ShenandoahPhaseTimings::print_summary_sd(outputStream* out, const char* str, const HdrSeq* seq) const {
-  out->print_cr("%-27s = %8.2lf s (a = %8.0lf us) (n = "INT32_FORMAT_W(5)") (lvls, us = %8.0lf, %8.0lf, %8.0lf, %8.0lf, %8.0lf)",
+  out->print_cr("%-27s = %8.2lf s (a = %8.0lf us) (n = " INT32_FORMAT_W(5) ") (lvls, us = %8.0lf, %8.0lf, %8.0lf, %8.0lf, %8.0lf)",
           str,
           seq->sum(),
           seq->avg() * 1000000.0,
@@ -131,8 +133,10 @@ void ShenandoahPhaseTimings::init_phase_names() {
   _phase_names[clear_liveness]                  = "  Clear Liveness";
   _phase_names[resize_tlabs]                    = "  Resize TLABs";
   _phase_names[finish_queues]                   = "  Finish Queues";
+  _phase_names[termination]                     = "    Termination";
   _phase_names[weakrefs]                        = "  Weak References";
   _phase_names[weakrefs_process]                = "    Process";
+  _phase_names[weakrefs_termination]            = "      Termination";
   _phase_names[weakrefs_enqueue]                = "    Enqueue";
   _phase_names[purge]                           = "  System Purge";
   _phase_names[purge_class_unload]              = "    Unload Classes";
@@ -142,8 +146,9 @@ void ShenandoahPhaseTimings::init_phase_names() {
   _phase_names[purge_par_rmt]                   = "      Resolved Methods";
   _phase_names[purge_par_classes]               = "      Clean Classes";
   _phase_names[purge_par_sync]                  = "      Synchronization";
+  _phase_names[purge_par_string_dedup]          = "    String Dedup";
   _phase_names[purge_cldg]                      = "    CLDG";
-  _phase_names[clean_str_dedup_table]           = "    String Dedup Table";
+  _phase_names[complete_liveness]               = "  Complete Liveness";
   _phase_names[prepare_evac]                    = "  Prepare Evacuation";
 
   _phase_names[scan_roots]                      = "  Scan Roots";
@@ -159,6 +164,7 @@ void ShenandoahPhaseTimings::init_phase_names() {
   _phase_names[scan_system_dictionary_roots]    = "    S: System Dict Roots";
   _phase_names[scan_cldg_roots]                 = "    S: CLDG Roots";
   _phase_names[scan_jvmti_roots]                = "    S: JVMTI Roots";
+  _phase_names[scan_string_dedup_roots]         = "    S: String Dedup Roots";
   _phase_names[scan_finish_queues]              = "    S: Finish Queues";
 
   _phase_names[update_roots]                    = "  Update Roots";
@@ -174,6 +180,7 @@ void ShenandoahPhaseTimings::init_phase_names() {
   _phase_names[update_system_dictionary_roots]  = "    U: System Dict Roots";
   _phase_names[update_cldg_roots]               = "    U: CLDG Roots";
   _phase_names[update_jvmti_roots]              = "    U: JVMTI Roots";
+  _phase_names[update_string_dedup_roots]       = "    U: String Dedup Roots";
   _phase_names[update_finish_queues]            = "    U: Finish Queues";
 
   _phase_names[init_evac]                       = "  Initial Evacuation";
@@ -189,6 +196,7 @@ void ShenandoahPhaseTimings::init_phase_names() {
   _phase_names[evac_system_dictionary_roots]    = "    E: System Dict Roots";
   _phase_names[evac_cldg_roots]                 = "    E: CLDG Roots";
   _phase_names[evac_jvmti_roots]                = "    E: JVMTI Roots";
+  _phase_names[evac_string_dedup_roots]         = "    E: String Dedup Roots";
   _phase_names[evac_finish_queues]              = "    E: Finish Queues";
 
   _phase_names[recycle_regions]                 = "  Recycle regions";
@@ -213,11 +221,14 @@ void ShenandoahPhaseTimings::init_phase_names() {
   _phase_names[full_gc_system_dictionary_roots] = "    F: System Dict Roots";
   _phase_names[full_gc_cldg_roots]              = "    F: CLDG Roots";
   _phase_names[full_gc_jvmti_roots]             = "    F: JVMTI Roots";
+  _phase_names[full_gc_string_dedup_roots]      = "    F: String Dedup Roots";
   _phase_names[full_gc_finish_queues]           = "    F: Finish Queues";
   _phase_names[full_gc_mark]                    = "  Mark";
   _phase_names[full_gc_mark_finish_queues]      = "    Finish Queues";
+  _phase_names[full_gc_mark_termination]        = "      Termination";
   _phase_names[full_gc_weakrefs]                = "    Weak References";
   _phase_names[full_gc_weakrefs_process]        = "      Process";
+  _phase_names[full_gc_weakrefs_termination]    = "        Termination";
   _phase_names[full_gc_weakrefs_enqueue]        = "      Enqueue";
   _phase_names[full_gc_purge]                   = "    System Purge";
   _phase_names[full_gc_purge_class_unload]      = "      Unload Classes";
@@ -228,6 +239,7 @@ void ShenandoahPhaseTimings::init_phase_names() {
   _phase_names[full_gc_purge_par_classes]       = "      Clean Classes";
   _phase_names[full_gc_purge_par_sync]          = "      Synchronization";
   _phase_names[full_gc_purge_cldg]              = "      CLDG";
+  _phase_names[full_gc_purge_par_string_dedup]      = "    Purge String Dedup";
   _phase_names[full_gc_calculate_addresses]     = "  Calculate Addresses";
   _phase_names[full_gc_calculate_addresses_regular] = "    Regular Objects";
   _phase_names[full_gc_calculate_addresses_humong]  = "    Humongous Objects";
@@ -235,38 +247,24 @@ void ShenandoahPhaseTimings::init_phase_names() {
   _phase_names[full_gc_copy_objects]            = "  Copy Objects";
   _phase_names[full_gc_copy_objects_regular]    = "    Regular Objects";
   _phase_names[full_gc_copy_objects_humong]     = "    Humongous Objects";
+  _phase_names[full_gc_copy_objects_reset_next]     = "    Reset Next Bitmap";
+  _phase_names[full_gc_copy_objects_reset_complete] = "    Reset Complete Bitmap";
+  _phase_names[full_gc_copy_objects_rebuild]     = "    Rebuild Region Sets";
   _phase_names[full_gc_update_str_dedup_table]  = "  Update String Dedup Table";
   _phase_names[full_gc_resize_tlabs]            = "  Resize TLABs";
-
-  _phase_names[partial_gc_gross]                = "Pause Partial GC (G)";
-  _phase_names[partial_gc]                      = "Pause Partial GC (N)";
-  _phase_names[partial_gc_prepare]              = "  Prepare";
-  _phase_names[partial_gc_work]                 = "  Work";
-  _phase_names[partial_gc_thread_roots]         = "    P: Thread Roots";
-  _phase_names[partial_gc_code_roots]           = "    P: Code Cache Roots";
-  _phase_names[partial_gc_string_table_roots]   = "    P: String Table Roots";
-  _phase_names[partial_gc_universe_roots]       = "    P: Universe Roots";
-  _phase_names[partial_gc_jni_roots]            = "    P: JNI Roots";
-  _phase_names[partial_gc_jni_weak_roots]       = "    P: JNI Weak Roots";
-  _phase_names[partial_gc_synchronizer_roots]   = "    P: Synchronizer Roots";
-  _phase_names[partial_gc_flat_profiler_roots]  = "    P: Flat Profiler Roots";
-  _phase_names[partial_gc_management_roots]     = "    P: Management Roots";
-  _phase_names[partial_gc_system_dict_roots]    = "    P: System Dict Roots";
-  _phase_names[partial_gc_cldg_roots]           = "    P: CLDG Roots";
-  _phase_names[partial_gc_jvmti_roots]          = "    P: JVMTI Roots";
-  _phase_names[partial_gc_update_str_dedup_table]
-                                                = "  Update String Dedup Table";
-  _phase_names[partial_gc_recycle]              = "  Recycle";
 
   _phase_names[pause_other]                     = "Pause Other";
 
   _phase_names[conc_mark]                       = "Concurrent Marking";
+  _phase_names[conc_termination]                = "  Termination";
   _phase_names[conc_preclean]                   = "Concurrent Precleaning";
   _phase_names[conc_evac]                       = "Concurrent Evacuation";
   _phase_names[conc_cleanup]                    = "Concurrent Cleanup";
   _phase_names[conc_cleanup_recycle]            = "  Recycle";
   _phase_names[conc_cleanup_reset_bitmaps]      = "  Reset Bitmaps";
   _phase_names[conc_other]                      = "Concurrent Other";
+
+  _phase_names[conc_uncommit]                   = "Concurrent Uncommit";
 
   _phase_names[init_update_refs_gross]          = "Pause Init  Update Refs (G)";
   _phase_names[init_update_refs]                = "Pause Init  Update Refs (N)";
@@ -288,6 +286,7 @@ void ShenandoahPhaseTimings::init_phase_names() {
   _phase_names[final_update_refs_system_dict_roots]    = "    UR: System Dict Roots";
   _phase_names[final_update_refs_cldg_roots]           = "    UR: CLDG Roots";
   _phase_names[final_update_refs_jvmti_roots]          = "    UR: JVMTI Roots";
+  _phase_names[final_update_refs_string_dedup_roots]   = "    UR: String Dedup Roots";
   _phase_names[final_update_refs_finish_queues]        = "    UR: Finish Queues";
   _phase_names[final_update_refs_recycle]              = "  Recycle";
 }
@@ -310,6 +309,7 @@ ShenandoahWorkerTimings::ShenandoahWorkerTimings(uint max_gc_threads) :
   _gc_par_phases[ShenandoahPhaseTimings::SystemDictionaryRoots]   = new ShenandoahWorkerDataArray<double>(max_gc_threads, "SystemDictionary Roots (ms):");
   _gc_par_phases[ShenandoahPhaseTimings::CLDGRoots]               = new ShenandoahWorkerDataArray<double>(max_gc_threads, "CLDG Roots (ms):");
   _gc_par_phases[ShenandoahPhaseTimings::JVMTIRoots]              = new ShenandoahWorkerDataArray<double>(max_gc_threads, "JVMTI Roots (ms):");
+  _gc_par_phases[ShenandoahPhaseTimings::StringDedupRoots]        = new ShenandoahWorkerDataArray<double>(max_gc_threads, "String Dedup Roots (ms):");
   _gc_par_phases[ShenandoahPhaseTimings::FinishQueues]            = new ShenandoahWorkerDataArray<double>(max_gc_threads, "Finish Queues (ms):");
 }
 
@@ -333,7 +333,7 @@ void ShenandoahWorkerTimings::print() {
 
 ShenandoahWorkerTimingsTracker::ShenandoahWorkerTimingsTracker(ShenandoahWorkerTimings* worker_times,
                                                                ShenandoahPhaseTimings::GCParPhases phase, uint worker_id) :
-        _worker_times(worker_times), _phase(phase), _worker_id(worker_id) {
+        _phase(phase), _worker_times(worker_times), _worker_id(worker_id) {
   if (_worker_times != NULL) {
     _start_time = os::elapsedTime();
   }
@@ -343,4 +343,61 @@ ShenandoahWorkerTimingsTracker::~ShenandoahWorkerTimingsTracker() {
   if (_worker_times != NULL) {
     _worker_times->record_time_secs(_phase, _worker_id, os::elapsedTime() - _start_time);
   }
+}
+
+ShenandoahTerminationTimings::ShenandoahTerminationTimings(uint max_gc_threads) {
+  _gc_termination_phase = new ShenandoahWorkerDataArray<double>(max_gc_threads, "Task Termination (ms):");
+}
+
+void ShenandoahTerminationTimings::record_time_secs(uint worker_id, double secs) {
+  if (_gc_termination_phase->get(worker_id) == ShenandoahWorkerDataArray<double>::uninitialized()) {
+    _gc_termination_phase->set(worker_id, secs);
+  } else {
+    // worker may re-enter termination phase
+    _gc_termination_phase->add(worker_id, secs);
+  }
+}
+
+void ShenandoahTerminationTimings::print() const {
+  _gc_termination_phase->print_summary_on(tty);
+}
+
+ShenandoahTerminationTimingsTracker::ShenandoahTerminationTimingsTracker(uint worker_id) :
+  _worker_id(worker_id)  {
+  if (ShenandoahTerminationTrace) {
+    _start_time = os::elapsedTime();
+  }
+}
+
+ShenandoahTerminationTimingsTracker::~ShenandoahTerminationTimingsTracker() {
+  if (ShenandoahTerminationTrace) {
+    ShenandoahHeap::heap()->phase_timings()->termination_times()->record_time_secs(_worker_id, os::elapsedTime() - _start_time);
+  }
+}
+
+ShenandoahPhaseTimings::Phase ShenandoahTerminationTracker::currentPhase = ShenandoahPhaseTimings::_num_phases;
+
+ShenandoahTerminationTracker::ShenandoahTerminationTracker(ShenandoahPhaseTimings::Phase phase) : _phase(phase) {
+  assert(currentPhase == ShenandoahPhaseTimings::_num_phases, "Should be invalid");
+  assert(phase == ShenandoahPhaseTimings::termination ||
+         phase == ShenandoahPhaseTimings::full_gc_mark_termination ||
+         phase == ShenandoahPhaseTimings::conc_termination ||
+         phase == ShenandoahPhaseTimings::weakrefs_termination ||
+         phase == ShenandoahPhaseTimings::full_gc_weakrefs_termination,
+         "Only these phases");
+
+  assert(Thread::current()->is_VM_thread() || Thread::current()->is_ConcurrentGC_thread(),
+    "Called from wrong thread");
+
+  currentPhase = phase;
+  ShenandoahHeap::heap()->phase_timings()->termination_times()->reset();
+}
+
+ShenandoahTerminationTracker::~ShenandoahTerminationTracker() {
+  assert(_phase == currentPhase, "Can not change phase");
+  ShenandoahPhaseTimings* phase_times = ShenandoahHeap::heap()->phase_timings();
+
+  double t = phase_times->termination_times()->average();
+  phase_times->record_phase_time(_phase, t * 1000 * 1000);
+  debug_only(currentPhase = ShenandoahPhaseTimings::_num_phases;)
 }
