@@ -71,9 +71,6 @@
           "regions, based on ShenandoahMinRegionSize and "                  \
           "ShenandoahMaxRegionSizeSize. ")                                  \
                                                                             \
-  product(bool, UseShenandoahMatrix, false,                                 \
-          "Keep a connection matrix and use this to drive collection sets") \
-                                                                            \
   product(ccstr, ShenandoahGCHeuristics, "adaptive",                        \
           "The heuristics to use in Shenandoah GC. Possible values: "       \
           "adaptive (adapt to maintain the given amount of free memory), "  \
@@ -87,6 +84,10 @@
   experimental(ccstr, ShenandoahUpdateRefsEarly, "adaptive",                \
           "Run a separate concurrent reference updating phase after"        \
           "concurrent evacuation. Possible values: 'on', 'off', 'adaptive'")\
+                                                                            \
+  experimental(uintx, ShenandoahEvacAssist, 10,                             \
+          "How many objects to evacuate on WB assist path. "                \
+          "Use zero to disable.")                                           \
                                                                             \
   product(uintx, ShenandoahRefProcFrequency, 5,                             \
           "How often should (weak, soft, etc) references be processed. "    \
@@ -113,9 +114,8 @@
           "Turns on logging in Shenandoah at warning level. ")              \
                                                                             \
   product_rw(uintx, ShenandoahFullGCThreshold, 3,                           \
-          "How many cycles in a row to do degenerated marking on "          \
-          "cancelled GC before triggering a full-gc"                        \
-          "Defaults to 3")                                                  \
+          "How many back-to-back Degenerated GCs to do before triggering "  \
+          "a Full GC. Defaults to 3.")                                      \
                                                                             \
   product_rw(uintx, ShenandoahGarbageThreshold, 60,                         \
           "Sets the percentage of garbage a region need to contain before " \
@@ -146,14 +146,40 @@
                "separate update-refs mode. Number is percentage relative "  \
                "to duration(marking)+duration(update-refs).")               \
                                                                             \
-  experimental(uintx, ShenandoahInitFreeThreshold, 30,                      \
-               "Initial remaining free threshold for adaptive heuristics")  \
+  experimental(uintx, ShenandoahInitFreeThreshold, 70,                      \
+               "Initial remaining free threshold for learning steps in "    \
+               "heuristics. In percents of total heap size.")               \
                                                                             \
   experimental(uintx, ShenandoahMinFreeThreshold, 10,                       \
                "Minimum remaining free threshold for adaptive heuristics")  \
                                                                             \
-  experimental(uintx, ShenandoahMaxFreeThreshold, 70,                       \
-               "Maximum remaining free threshold for adaptive heuristics")  \
+  experimental(uintx, ShenandoahLearningSteps, 5,                           \
+               "Number of GC cycles to run in order to learn application "  \
+               "and GC performance for adaptive heuristics.")               \
+                                                                            \
+  experimental(uintx, ShenandoahAllocSpikeFactor, 5,                        \
+               "The amount of heap space to reserve for absorbing the "     \
+               "allocation spikes. Larger value wastes more memory in "     \
+               "non-emergency cases, but provides more safety in emergency "\
+               "cases. In percents of total heap size.")                    \
+                                                                            \
+  experimental(uintx, ShenandoahEvacReserve, 5,                             \
+               "Maximum amount of free space to reserve for evacuation. "   \
+               "Larger values make GC more aggressive, while leaving less " \
+               "headroom for application to allocate in. "                  \
+               "In percents of free space available.")                      \
+                                                                            \
+  experimental(double, ShenandoahEvacWaste, 1.2,                            \
+               "How much waste evacuations produce within the reserved "    \
+               "space. Larger values make evacuations more resilient "      \
+               "against allocation failures, at expense of smaller csets "  \
+               "on each cycle.")                                            \
+                                                                            \
+  experimental(bool, ShenandoahEvacReserveOverflow, true,                   \
+               "Allow evacuations to overflow the reserved space. "         \
+               "Enabling it will make evacuations more resilient when "     \
+               "evacuation reserve/waste is incorrect, at the risk that "   \
+               "application allocations run out of memory too early.")      \
                                                                             \
   experimental(uintx, ShenandoahImmediateThreshold, 90,                     \
                "If mark identifies more than this much immediate garbage "  \
@@ -178,15 +204,11 @@
   experimental(bool, ShenandoahConcurrentScanCodeRoots, true,               \
           "Scan code roots concurrently, instead of during a pause")        \
                                                                             \
-  experimental(bool, ShenandoahConcurrentEvacCodeRoots, false,              \
-          "Evacuate code roots concurrently, instead of during a pause. "   \
-          "This requires ShenandoahBarriersForConst to be enabled.")        \
-                                                                            \
-  experimental(uintx, ShenandoahCodeRootsStyle, 1,                          \
+  experimental(uintx, ShenandoahCodeRootsStyle, 2,                          \
           "Use this style to scan code cache:"                              \
           " 0 - sequential iterator;"                                       \
           " 1 - parallel iterator;"                                         \
-          " 2 - parallel iterator with filters;")                           \
+          " 2 - parallel iterator with cset filters;")                      \
                                                                             \
   experimental(bool, ShenandoahUncommit, true,                              \
           "Allow Shenandoah to uncommit unused memory.")                    \
@@ -199,21 +221,9 @@
            "Setting this delay to 0 effectively makes Shenandoah to "       \
            "uncommit the regions almost immediately.")                      \
                                                                             \
-  experimental(bool, ShenandoahBarriersForConst, false,                     \
-          "Emit barriers for constant oops in generated code, improving "   \
-          "throughput. If no barriers are emitted, GC will need to "        \
-          "pre-evacuate code roots before returning from STW, adding to "   \
-          "pause time.")                                                    \
-                                                                            \
   experimental(bool, ShenandoahDontIncreaseWBFreq, true,                    \
           "Common 2 WriteBarriers or WriteBarrier and a ReadBarrier only "  \
           "if the resulting WriteBarrier isn't executed more frequently")   \
-                                                                            \
-  experimental(bool, ShenandoahNoLivenessFullGC, true,                      \
-          "Skip liveness counting for mark during full GC.")                \
-                                                                            \
-  experimental(bool, ShenandoahWriteBarrierToIR, true,                      \
-          "Convert write barrier to IR instead of using assembly blob")     \
                                                                             \
   experimental(bool, ShenandoahWriteBarrierCsetTestInIR, true,              \
           "Perform cset test in IR rather than in the stub")                \
@@ -247,9 +257,6 @@
               "The time period for one step in control loop interval "      \
               "adjustment. Lower values make adjustments faster, at the "   \
               "expense of higher perf overhead. Time is in milliseconds.")  \
-                                                                            \
-  diagnostic(bool, ShenandoahAllocImplicitLive, true,                       \
-              "Treat (non-evac) allocations implicitely live")              \
                                                                             \
   diagnostic(bool, ShenandoahSATBBarrier, true,                             \
           "Turn on/off SATB barriers in Shenandoah")                        \
@@ -314,10 +321,6 @@
           "How many objects to prefetch ahead when traversing mark bitmaps." \
           "Set to 0 to disable prefetching.")                               \
                                                                             \
-  experimental(intx, ShenandoahAllocGCTries, 5,                             \
-          "How many times to try to do GC on allocation failure."           \
-          "Set to 0 to never try, and fail instead.")                       \
-                                                                            \
   experimental(bool, ShenandoahFastSyncRoots, true,                         \
           "Enable fast synchronizer roots scanning")                        \
                                                                             \
@@ -359,10 +362,36 @@
           "beginning of the GC cycle. Lower value makes the pacing less "   \
           "uniform during the cycle.")                                      \
                                                                             \
+  experimental(double, ShenandoahPacingSurcharge, 1.1,                      \
+          "Additional pacing tax surcharge to help unclutter the heap. "    \
+          "Larger values makes the pacing more aggressive. Lower values "   \
+          "risk GC cycles finish with less memory than were available at "  \
+          "the beginning of it.")                                           \
+                                                                            \
+  experimental(uintx, ShenandoahCriticalFreeThreshold, 1,                   \
+          "Percent of heap that needs to be free after recovery cycles, "   \
+          "either Degenerated or Full GC. If this much space is not "       \
+          "available, next recovery step would triggered.")                 \
+                                                                            \
+  experimental(uintx, ShenandoahSATBBufferFlushInterval, 100,               \
+          "Forcefully flush non-empty SATB buffers at this interval. "      \
+          "Time is in milliseconds.")                                       \
+                                                                            \
   diagnostic(bool, ShenandoahAllowMixedAllocs, true,                        \
           "Allow mixing mutator and collector allocations in a single "     \
           "region")                                                         \
                                                                             \
+  diagnostic(bool, ShenandoahTerminationTrace, false,                       \
+          "Tracing task termination timings")                               \
+                                                                            \
+  diagnostic(bool, ShenandoahElasticTLAB, true,                             \
+          "Use Elastic TLABs with Shenandoah")                              \
+                                                                            \
+  diagnostic(bool, ShenandoahCompileCheck, false,                           \
+          "Assert that methods are successfully compilable")                \
+                                                                            \
+  experimental(bool, ShenandoahAlwaysClearSoftRefs, false,                  \
+          "Clear soft references unconditionally")                          \
 
 SHENANDOAH_FLAGS(DECLARE_DEVELOPER_FLAG, \
                  DECLARE_PD_DEVELOPER_FLAG,     \

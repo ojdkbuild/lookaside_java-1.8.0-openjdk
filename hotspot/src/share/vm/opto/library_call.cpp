@@ -1252,7 +1252,6 @@ bool LibraryCallKit::inline_string_compareTo() {
   if (stopped()) {
     return true;
   }
-
   set_result(make_string_method_node(Op_StrComp, receiver, arg));
   return true;
 }
@@ -2694,18 +2693,6 @@ bool LibraryCallKit::inline_unsafe_access(bool is_native_ptr, bool is_store, Bas
   bool can_access_non_heap = TypePtr::NULL_PTR->higher_equal(_gvn.type(heap_base_oop));
 
   const TypePtr *adr_type = _gvn.type(adr)->isa_ptr();
-
-  if (UseShenandoahGC && adr->is_AddP() &&
-      adr->in(AddPNode::Base) == adr->in(AddPNode::Address)) {
-    Node* base = ShenandoahBarrierNode::skip_through_barrier(adr->in(AddPNode::Base));
-    const TypeInstPtr* base_t = _gvn.type(base)->isa_instptr();
-    if (base_t != NULL &&
-        base_t->const_oop() != NULL &&
-        base_t->klass() == ciEnv::current()->Class_klass() &&
-        adr_type->is_instptr()->offset() >= base_t->klass()->as_instance_klass()->size_helper() * wordSize) {
-      adr_type = base_t->add_offset(adr_type->is_instptr()->offset());
-    }
-  }
 
   // Try to categorize the address.
   Compile::AliasType* alias_type = C->alias_type(adr_type);
@@ -6616,7 +6603,6 @@ bool LibraryCallKit::inline_cipherBlockChaining_AESCrypt(vmIntrinsics::ID id) {
   Node* dest                       = argument(4);
   Node* dest_offset                = argument(5);
 
-
   // inline_cipherBlockChaining_AESCrypt_predicate() has its own
   // barrier. This one should optimize away.
   src = shenandoah_cast_not_null(src);
@@ -7076,7 +7062,6 @@ bool LibraryCallKit::inline_profileBoolean() {
   Node* counts = argument(1);
   const TypeAryPtr* ary = NULL;
   ciArray* aobj = NULL;
-  assert(!(ShenandoahBarrierNode::skip_through_barrier(counts)->is_Con() && !counts->is_Con()), "barrier prevents optimization");
   if (counts->is_Con()
       && (ary = counts->bottom_type()->isa_aryptr()) != NULL
       && (aobj = ary->const_oop()->as_array()) != NULL

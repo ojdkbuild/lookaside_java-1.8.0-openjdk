@@ -53,11 +53,14 @@
     }                                                                       \
   } while (0)
 
-
 class ShenandoahCollectionSet;
 class ShenandoahHeapRegion;
 
 class ShenandoahHeuristics : public CHeapObj<mtGC> {
+  static const intx Concurrent_Adjust   =  1; // recover from penalties
+  static const intx Degenerated_Penalty = 10; // how much to penalize average GC duration history on Degenerated GC
+  static const intx Full_Penalty        = 20; // how much to penalize average GC duration history on Full GC
+
 protected:
   typedef struct {
     ShenandoahHeapRegion* _region;
@@ -65,35 +68,29 @@ protected:
     uint64_t _seqnum_last_alloc;
   } RegionData;
 
-  typedef struct {
-    ShenandoahHeapRegion* _region;
-    size_t _connections;
-  } RegionConnections;
-
   bool _update_refs_early;
   bool _update_refs_adaptive;
 
   RegionData* _region_data;
   size_t _region_data_size;
 
-  RegionConnections* _region_connects;
-  size_t _region_connects_size;
-
   uint _degenerated_cycles_in_a_row;
   uint _successful_cycles_in_a_row;
 
   size_t _bytes_in_cset;
 
+  double _cycle_start;
   double _last_cycle_end;
+
+  size_t _gc_times_learned;
+  size_t _gc_time_penalties;
+  TruncatedSeq* _gc_time_history;
 
   static int compare_by_garbage(RegionData a, RegionData b);
   static int compare_by_alloc_seq_ascending(RegionData a, RegionData b);
   static int compare_by_alloc_seq_descending(RegionData a, RegionData b);
-  static int compare_by_connects(RegionConnections a, RegionConnections b);
 
   RegionData* get_region_data_cache(size_t num);
-
-  RegionConnections* get_region_connects_cache(size_t num);
 
   virtual void choose_collection_set_from_regiondata(ShenandoahCollectionSet* set,
                                                      RegionData* data, size_t data_size,
@@ -114,13 +111,9 @@ public:
 
   virtual void record_phase_time(ShenandoahPhaseTimings::Phase phase, double secs);
 
-  virtual void print_thresholds();
-
-  virtual bool should_start_normal_gc() const = 0;
+  virtual bool should_start_normal_gc() const;
 
   virtual bool should_start_update_refs();
-
-  virtual bool update_refs() const;
 
   virtual bool should_degenerate_cycle();
 
@@ -133,8 +126,6 @@ public:
   virtual void record_allocation_failure_gc();
 
   virtual void record_explicit_gc();
-
-  virtual void record_peak_occupancy();
 
   virtual void start_choose_collection_set() {
   }

@@ -24,9 +24,15 @@
 #include "precompiled.hpp"
 #include "gc_implementation/shenandoah/shenandoahHeap.hpp"
 #include "gc_implementation/shenandoah/shenandoahWorkGroup.hpp"
- 
-ShenandoahWorkerScope::ShenandoahWorkerScope(ShenandoahWorkGang* workers, uint nworkers) :
-  _workers(workers), _n_workers(nworkers) {
+#include "gc_implementation/shenandoah/shenandoahLogging.hpp"
+
+ShenandoahWorkerScope::ShenandoahWorkerScope(ShenandoahWorkGang* workers, uint nworkers, const char* msg) :
+  _n_workers(nworkers),
+  _workers(workers) {
+  assert(msg != NULL, "Missing message");
+  log_info(gc, task)("Using %u of %u workers for %s",
+                     nworkers, ShenandoahHeap::heap()->max_workers(), msg);
+
   ShenandoahHeap::heap()->assert_gc_workers(nworkers);
   _workers->set_active_workers(nworkers);
 }
@@ -37,11 +43,13 @@ ShenandoahWorkerScope::~ShenandoahWorkerScope() {
 }
 
 ShenandoahPushWorkerScope::ShenandoahPushWorkerScope(ShenandoahWorkGang* workers, uint nworkers, bool check) :
-  _workers(workers), _old_workers(workers->active_workers()), _n_workers(nworkers) {
+  _n_workers(nworkers),
+  _old_workers(workers->active_workers()),
+  _workers(workers) {
   _workers->set_active_workers(nworkers);
 
   // bypass concurrent/parallel protocol check for non-regular paths, e.g. verifier, etc.
-  if (!check) {
+  if (check) {
     ShenandoahHeap::heap()->assert_gc_workers(nworkers);
   }
 }

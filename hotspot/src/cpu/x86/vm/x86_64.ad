@@ -6478,22 +6478,6 @@ instruct shenandoahRBNarrowShift(rRegP dst, rRegN src) %{
   ins_pipe(ialu_reg_mem);
 %}
 
-instruct shenandoahWB(rRegP dst, rRegP src, rFlagsReg cr) %{
-  match(Set dst (ShenandoahWriteBarrier src));
-  effect(DEF dst, USE src, KILL cr);
-  ins_cost(300); // XXX
-  format %{ "shenandoah_wb $dst,$src" %}
-  ins_encode %{
-    Register s = $src$$Register;
-    Register d = $dst$$Register;
-    // We need that first read barrier in order to trigger a SEGV/NPE on incoming NULL.
-    // Also, it brings s into d in preparation for the call to shenandoah_write_barrier().
-    __ movptr(d, Address(s, BrooksPointer::byte_offset()));
-    __ shenandoah_write_barrier(d);
-  %}
-  ins_pipe(pipe_slow);
-%}
-
 // Convert oop pointer into compressed form
 instruct encodeHeapOop(rRegN dst, rRegP src, rFlagsReg cr) %{
   predicate(n->bottom_type()->make_ptr()->ptr() != TypePtr::NotNull);
@@ -7368,7 +7352,7 @@ instruct compareAndSwapP_shenandoah(rRegI res,
                                     rax_RegP oldval, rRegP newval,
                                     rFlagsReg cr)
 %{
-  predicate(VM_Version::supports_cx8() && UseShenandoahGC && ShenandoahCASBarrier);
+  predicate(VM_Version::supports_cx8() && UseShenandoahGC && ShenandoahCASBarrier && n->in(3)->in(1)->bottom_type() != TypePtr::NULL_PTR);
   match(Set res (CompareAndSwapP mem_ptr (Binary oldval newval)));
   effect(TEMP tmp1, TEMP tmp2, KILL cr, KILL oldval);
 
@@ -7435,7 +7419,7 @@ instruct compareAndSwapN(rRegI res,
                           memory mem_ptr,
                           rax_RegN oldval, rRegN newval,
                           rFlagsReg cr) %{
-  predicate(!UseShenandoahGC || !ShenandoahCASBarrier);
+  predicate(!UseShenandoahGC || !ShenandoahCASBarrier || n->in(3)->in(1)->bottom_type() == TypeNarrowOop::NULL_PTR);
   match(Set res (CompareAndSwapN mem_ptr (Binary oldval newval)));
   effect(KILL cr, KILL oldval);
 
@@ -7459,7 +7443,7 @@ instruct compareAndSwapN_shenandoah(rRegI res,
                                     rRegP tmp1, rRegP tmp2,
                                     rax_RegN oldval, rRegN newval,
                                     rFlagsReg cr) %{
-  predicate(UseShenandoahGC && ShenandoahCASBarrier);
+  predicate(UseShenandoahGC && ShenandoahCASBarrier && n->in(3)->in(1)->bottom_type() != TypeNarrowOop::NULL_PTR);
   match(Set res (CompareAndSwapN mem_ptr (Binary oldval newval)));
   effect(TEMP tmp1, TEMP tmp2, KILL cr, KILL oldval);
 
@@ -11282,48 +11266,29 @@ instruct testUL_reg(rFlagsRegU cr, rRegL src, immL0 zero)
   ins_pipe(ialu_cr_reg_imm);
 %}
 
-instruct compUB_mem_imm(rFlagsReg cr, memory op1, immU8 op2)
+instruct compB_mem_imm(rFlagsReg cr, memory mem, immI8 imm)
 %{
-  // This match is actually generic, but protect with Shenandoah flag for a while,
-  // until the fix is upstreamed.
+  // This match is actually generic, but protect with Shenandoah flag,
+  // because it is not tested upstream.
   predicate(UseShenandoahGC);
-  match(Set cr (CmpI (LoadUB op1) op2));
+  match(Set cr (CmpI (LoadB mem) imm));
 
   ins_cost(125);
-  format %{ "cmpb    $op1, $op2" %}
-  ins_encode %{
-    __ cmpb($op1$$Address, $op2$$constant);
-  %}
+  format %{ "cmpb    $mem, $imm" %}
+  ins_encode %{ __ cmpb($mem$$Address, $imm$$constant); %}
   ins_pipe(ialu_cr_reg_mem);
 %}
 
-instruct compB_mem_imm(rFlagsReg cr, memory op1, immI8 op2)
+instruct testB_mem_imm(rFlagsReg cr, memory mem, immI8 imm, immI0 zero)
 %{
-  // This match is actually generic, but protect with Shenandoah flag for a while,
-  // until the fix is upstreamed.
+  // This match is actually generic, but protect with Shenandoah flag,
+  // because it is not tested upstream
   predicate(UseShenandoahGC);
-  match(Set cr (CmpI (LoadB op1) op2));
+  match(Set cr (CmpI (AndI (LoadB mem) imm) zero));
 
   ins_cost(125);
-  format %{ "cmpb    $op1, $op2" %}
-  ins_encode %{
-    __ cmpb($op1$$Address, $op2$$constant);
-  %}
-  ins_pipe(ialu_cr_reg_mem);
-%}
-
-instruct testUB_mem_imm(rFlagsReg cr, memory op1, immU8 op2, immI0 opZ)
-%{
-  // This match is actually generic, but protect with Shenandoah flag for a while,
-  // until the fix is upstreamed.
-  predicate(UseShenandoahGC);
-  match(Set cr (CmpI (AndI (LoadUB op1) op2) opZ));
-
-  ins_cost(125);
-  format %{ "testb   $op1, $op2" %}
-  ins_encode %{
-    __ testb($op1$$Address, $op2$$constant);
-  %}
+  format %{ "testb   $mem, $imm" %}
+  ins_encode %{ __ testb($mem$$Address, $imm$$constant); %}
   ins_pipe(ialu_cr_reg_mem);
 %}
 

@@ -80,6 +80,10 @@ class oopDesc {
     p->_mark = m;
   }
 
+  void set_mark_raw(volatile markOop m) {
+    _mark = m;
+  }
+
   void    release_set_mark(markOop m);
   markOop cas_set_mark(markOop new_mark, markOop old_mark);
 
@@ -154,22 +158,6 @@ class oopDesc {
 
   inline static bool equals(narrowOop o1, narrowOop o2) {
     return bs()->obj_equals(o1, o2);
-  }
-
-  inline static bool safe_equals(oop o1, oop o2) {
-#ifdef ASSERT
-    bs()->verify_safe_oop(o1);
-    bs()->verify_safe_oop(o2);
-#endif
-    return unsafe_equals(o1, o2);
-  }
-
-  inline static bool safe_equals(narrowOop o1, narrowOop o2) {
-#ifdef ASSERT
-    bs()->verify_safe_oop(o1);
-    bs()->verify_safe_oop(o2);
-#endif
-    return unsafe_equals(o1, o2);
   }
 
   inline static bool unsafe_equals(oop o1, oop o2) {
@@ -253,6 +241,7 @@ class oopDesc {
 
   jint int_field(int offset) const;
   void int_field_put(int offset, jint contents);
+  void int_field_put_raw(int offset, jint contents);
 
   jshort short_field(int offset) const;
   void short_field_put(int offset, jshort contents);

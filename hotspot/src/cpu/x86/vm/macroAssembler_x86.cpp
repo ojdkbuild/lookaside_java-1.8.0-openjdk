@@ -3750,7 +3750,6 @@ void MacroAssembler::null_check(Register reg, int offset) {
     // provoke OS NULL exception if reg = NULL by
     // accessing M[reg] w/o changing any (non-CC) registers
     // NOTE: cmpl is plenty here to provoke a segv
-
     cmpptr(rax, Address(reg, 0));
     // Note: should probably use testl(rax, Address(reg, 0));
     //       may be shorter code (however, this version of
@@ -4449,15 +4448,19 @@ void MacroAssembler::shenandoah_write_barrier(Register dst) {
 
   Label done;
 
-  // Check for evacuation-in-progress
   Address gc_state(r15_thread, in_bytes(JavaThread::gc_state_offset()));
-  testb(gc_state, ShenandoahHeap::EVACUATION);
 
-  // The read-barrier.
+  // Check for heap stability
+  testb(gc_state, ShenandoahHeap::HAS_FORWARDED | ShenandoahHeap::EVACUATION);
+  jccb(Assembler::zero, done);
+
+  // Heap is unstable, need to perform the read-barrier even if WB is inactive
   if (ShenandoahWriteBarrierRB) {
     movptr(dst, Address(dst, BrooksPointer::byte_offset()));
   }
 
+  // Check for evacuation-in-progress and jump to WB slow-path if needed
+  testb(gc_state, ShenandoahHeap::EVACUATION);
   jccb(Assembler::zero, done);
 
   if (dst != rax) {

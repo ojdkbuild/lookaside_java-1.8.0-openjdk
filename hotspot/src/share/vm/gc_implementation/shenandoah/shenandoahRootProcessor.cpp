@@ -33,6 +33,7 @@
 #include "gc_implementation/shenandoah/shenandoahBarrierSet.hpp"
 #include "gc_implementation/shenandoah/shenandoahCollectorPolicy.hpp"
 #include "gc_implementation/shenandoah/shenandoahPhaseTimings.hpp"
+#include "gc_implementation/shenandoah/shenandoahStringDedup.hpp"
 #include "memory/allocation.inline.hpp"
 #include "runtime/fprofiler.hpp"
 #include "runtime/mutex.hpp"
@@ -49,6 +50,10 @@ ShenandoahRootProcessor::ShenandoahRootProcessor(ShenandoahHeap* heap, uint n_wo
   heap->phase_timings()->record_workers_start(_phase);
   _process_strong_tasks->set_n_threads(n_workers);
   heap->set_par_threads(n_workers);
+
+  if (ShenandoahStringDedup::is_enabled()) {
+    ShenandoahStringDedup::clear_claimed();
+  }
 }
 
 ShenandoahRootProcessor::~ShenandoahRootProcessor() {
@@ -73,6 +78,10 @@ void ShenandoahRootProcessor::process_all_roots_slow(OopClosure* oops) {
   ObjectSynchronizer::oops_do(oops);
   SystemDictionary::roots_oops_do(oops, oops);
   StringTable::oops_do(oops);
+
+  if (ShenandoahStringDedup::is_enabled()) {
+    ShenandoahStringDedup::oops_do_slow(oops);
+  }
 
   // Do thread roots the last. This allows verification code to find
   // any broken objects from those special roots first, not the accidental
@@ -142,7 +151,9 @@ void ShenandoahRootProcessor::process_vm_roots(OopClosure* strong_roots,
                                                OopClosure* jni_weak_roots,
                                                uint worker_id)
 {
-  ShenandoahWorkerTimings* worker_times = ShenandoahHeap::heap()->phase_timings()->worker_times();
+  ShenandoahHeap* heap = ShenandoahHeap::heap();
+
+  ShenandoahWorkerTimings* worker_times = heap->phase_timings()->worker_times();
   if (!_process_strong_tasks->is_task_claimed(SHENANDOAH_RP_PS_Universe_oops_do)) {
     ShenandoahWorkerTimingsTracker timer(worker_times, ShenandoahPhaseTimings::UniverseRoots, worker_id);
     Universe::oops_do(strong_roots);
@@ -169,12 +180,27 @@ void ShenandoahRootProcessor::process_vm_roots(OopClosure* strong_roots,
     ShenandoahWorkerTimingsTracker timer(worker_times, ShenandoahPhaseTimings::SystemDictionaryRoots, worker_id);
     SystemDictionary::roots_oops_do(strong_roots, weak_roots);
   }
+
+  // Note: Workaround bugs with JNI weak reference handling during concurrent cycles,
+  // by pessimistically assuming all JNI weak refs are alive. Achieve this by passing
+  // stronger closure, where weaker one would suffice otherwise. This effectively makes
+  // JNI weak refs non-reclaimable by concurrent GC, but they would be reclaimed by
+  // STW GCs, that are not affected by the bug, nevertheless.
+  if (!heap->is_full_gc_in_progress() && !heap->is_degenerated_gc_in_progress()) {
+    jni_weak_roots = strong_roots;
+  }
+
   if (jni_weak_roots != NULL) {
     if (!_process_strong_tasks->is_task_claimed(SHENANDOAH_RP_PS_JNIHandles_weak_oops_do)) {
       ShenandoahAlwaysTrueClosure always_true;
       ShenandoahWorkerTimingsTracker timer(worker_times, ShenandoahPhaseTimings::JNIWeakRoots, worker_id);
       JNIHandles::weak_oops_do(&always_true, jni_weak_roots);
     }
+  }
+
+  if (ShenandoahStringDedup::is_enabled() && weak_roots != NULL) {
+    ShenandoahWorkerTimingsTracker timer(worker_times, ShenandoahPhaseTimings::StringDedupRoots, worker_id);
+    ShenandoahStringDedup::parallel_oops_do(weak_roots);
   }
 
   {
@@ -226,7 +252,6 @@ void ShenandoahRootEvacuator::process_evacuate_roots(OopClosure* oops,
     // to do there, because we cannot trigger Full GC right here, when we are
     // in another VMOperation.
 
-    ShenandoahEvacOOMScopeLeaver leaver;
     oop pll = java_lang_ref_Reference::pending_list_lock();
     oopDesc::bs()->write_barrier(pll);
   }

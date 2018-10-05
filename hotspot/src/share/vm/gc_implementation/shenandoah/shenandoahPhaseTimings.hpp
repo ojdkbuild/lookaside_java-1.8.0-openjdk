@@ -32,6 +32,7 @@
 
 class ShenandoahCollectorPolicy;
 class ShenandoahWorkerTimings;
+class ShenandoahTerminationTimings;
 class outputStream;
 
 class ShenandoahPhaseTimings : public CHeapObj<mtGC> {
@@ -60,6 +61,7 @@ public:
     scan_system_dictionary_roots,
     scan_cldg_roots,
     scan_jvmti_roots,
+    scan_string_dedup_roots,
     scan_finish_queues,
 
     resize_tlabs,
@@ -81,11 +83,14 @@ public:
     update_system_dictionary_roots,
     update_cldg_roots,
     update_jvmti_roots,
+    update_string_dedup_roots,
     update_finish_queues,
 
     finish_queues,
+    termination,
     weakrefs,
     weakrefs_process,
+    weakrefs_termination,
     weakrefs_enqueue,
     purge,
     purge_class_unload,
@@ -95,9 +100,10 @@ public:
     purge_par_rmt,
     purge_par_classes,
     purge_par_sync,
+    purge_par_string_dedup,
     purge_cldg,
-    clean_str_dedup_table,
     prepare_evac,
+    complete_liveness,
     recycle_regions,
 
     // Per-thread timer block, should have "roots" counters in consistent order
@@ -114,6 +120,7 @@ public:
     evac_system_dictionary_roots,
     evac_cldg_roots,
     evac_jvmti_roots,
+    evac_string_dedup_roots,
     evac_finish_queues,
 
     final_evac_gross,
@@ -140,30 +147,10 @@ public:
     final_update_refs_system_dict_roots,
     final_update_refs_cldg_roots,
     final_update_refs_jvmti_roots,
+    final_update_refs_string_dedup_roots,
     final_update_refs_finish_queues,
 
     final_update_refs_recycle,
-
-    partial_gc_gross,
-    partial_gc,
-    partial_gc_prepare,
-
-    // Per-thread timer block, should have "roots" counters in consistent order
-    partial_gc_work,
-    partial_gc_thread_roots,
-    partial_gc_code_roots,
-    partial_gc_string_table_roots,
-    partial_gc_universe_roots,
-    partial_gc_jni_roots,
-    partial_gc_jni_weak_roots,
-    partial_gc_synchronizer_roots,
-    partial_gc_flat_profiler_roots,
-    partial_gc_management_roots,
-    partial_gc_system_dict_roots,
-    partial_gc_cldg_roots,
-    partial_gc_jvmti_roots,
-    partial_gc_update_str_dedup_table,
-    partial_gc_recycle,
 
     degen_gc_gross,
     degen_gc,
@@ -187,12 +174,15 @@ public:
     full_gc_system_dictionary_roots,
     full_gc_cldg_roots,
     full_gc_jvmti_roots,
+    full_gc_string_dedup_roots,
     full_gc_finish_queues,
 
     full_gc_mark,
     full_gc_mark_finish_queues,
+    full_gc_mark_termination,
     full_gc_weakrefs,
     full_gc_weakrefs_process,
+    full_gc_weakrefs_termination,
     full_gc_weakrefs_enqueue,
     full_gc_purge,
     full_gc_purge_class_unload,
@@ -203,6 +193,7 @@ public:
     full_gc_purge_par_classes,
     full_gc_purge_par_sync,
     full_gc_purge_cldg,
+    full_gc_purge_par_string_dedup,
     full_gc_calculate_addresses,
     full_gc_calculate_addresses_regular,
     full_gc_calculate_addresses_humong,
@@ -210,17 +201,23 @@ public:
     full_gc_copy_objects,
     full_gc_copy_objects_regular,
     full_gc_copy_objects_humong,
+    full_gc_copy_objects_reset_next,
+    full_gc_copy_objects_reset_complete,
+    full_gc_copy_objects_rebuild,
     full_gc_update_str_dedup_table,
     full_gc_resize_tlabs,
 
     // Longer concurrent phases at the end
     conc_mark,
+    conc_termination,
     conc_preclean,
     conc_evac,
     conc_update_refs,
     conc_cleanup,
     conc_cleanup_recycle,
     conc_cleanup_reset_bitmaps,
+
+    conc_uncommit,
 
     // Unclassified
     pause_other,
@@ -231,7 +228,7 @@ public:
 
 
   // These are the subphases of GC phases (scan_roots, update_roots,
-  // init_evac, final_update_refs_roots, partial_gc_work and full_gc_roots).
+  // init_evac, final_update_refs_roots, and full_gc_roots).
   // Make sure they are following this order.
   enum GCParPhases {
     ThreadRoots,
@@ -246,6 +243,7 @@ public:
     SystemDictionaryRoots,
     CLDGRoots,
     JVMTIRoots,
+    StringDedupRoots,
     FinishQueues,
     GCParPhasesSentinel
   };
@@ -260,19 +258,22 @@ private:
   TimingData _timing_data[_num_phases];
   const char* _phase_names[_num_phases];
 
-  ShenandoahWorkerTimings* _worker_times;
+  ShenandoahWorkerTimings*      _worker_times;
+  ShenandoahTerminationTimings* _termination_times;
+
   ShenandoahCollectorPolicy* _policy;
 
 public:
   ShenandoahPhaseTimings();
 
-  ShenandoahWorkerTimings* worker_times() const { return _worker_times; }
+  ShenandoahWorkerTimings* const worker_times() const { return _worker_times; }
+  ShenandoahTerminationTimings* const termination_times() const { return _termination_times; }
 
   // record phase start
   void record_phase_start(Phase phase);
   // record phase end and return elapsed time in seconds for the phase
   void record_phase_end(Phase phase);
-  // record an elapsed time in seconds for the phase
+  // record an elapsed time in microseconds for the phase
   void record_phase_time(Phase phase, jint time_us);
 
   void record_workers_start(Phase phase);
@@ -309,6 +310,43 @@ class ShenandoahWorkerTimingsTracker : public StackObj {
 public:
   ShenandoahWorkerTimingsTracker(ShenandoahWorkerTimings* worker_times, ShenandoahPhaseTimings::GCParPhases phase, uint worker_id);
   ~ShenandoahWorkerTimingsTracker();
+};
+
+class ShenandoahTerminationTimings : public CHeapObj<mtGC> {
+private:
+  ShenandoahWorkerDataArray<double>* _gc_termination_phase;
+public:
+  ShenandoahTerminationTimings(uint max_gc_threads);
+
+  // record the time a phase took in seconds
+  void record_time_secs(uint worker_i, double secs);
+
+  double average() const { return _gc_termination_phase->average(); }
+  void reset() { _gc_termination_phase->reset(); }
+
+  void print() const;
+};
+
+class ShenandoahTerminationTimingsTracker : public StackObj {
+private:
+  double _start_time;
+  uint   _worker_id;
+
+public:
+  ShenandoahTerminationTimingsTracker(uint worker_id);
+  ~ShenandoahTerminationTimingsTracker();
+};
+
+
+// Tracking termination time in specific GC phase
+class ShenandoahTerminationTracker : public StackObj {
+private:
+  ShenandoahPhaseTimings::Phase _phase;
+
+  static ShenandoahPhaseTimings::Phase currentPhase;
+public:
+  ShenandoahTerminationTracker(ShenandoahPhaseTimings::Phase phase);
+  ~ShenandoahTerminationTracker();
 };
 
 #endif // SHARE_VM_GC_SHENANDOAH_SHENANDOAHGCPHASETIMEINGS_HPP
