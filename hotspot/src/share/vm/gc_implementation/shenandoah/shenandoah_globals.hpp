@@ -55,10 +55,10 @@
           "Size of the Shenandoah regions. "                                \
           "Determined automatically by default.")                           \
                                                                             \
-  experimental(uintx, ShenandoahMinRegionSize, 256 * K,                     \
+  experimental(size_t, ShenandoahMinRegionSize, 256 * K,                     \
           "Minimum heap region size. ")                                     \
                                                                             \
-  experimental(uintx, ShenandoahMaxRegionSize, 32 * M,                      \
+  experimental(size_t, ShenandoahMaxRegionSize, 32 * M,                      \
           "Maximum heap region size. ")                                     \
                                                                             \
   experimental(intx, ShenandoahHumongousThreshold, 100,                     \
