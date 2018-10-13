@@ -649,7 +649,6 @@ USE_EXTERNAL_LIBZ
 USE_OJDKBUILD_LIBZ
 OJDKBUILD_ZLIB_CFLAGS
 OJDKBUILD_ZLIB_LDFLAGS
-OJDKBUILD_ZLIB_BUNDLE_LIB_PATH
 USE_OJDKBUILD_NSS
 OJDKBUILD_NSS_CFLAGS
 OJDKBUILD_NSS_LDFLAGS
@@ -1156,7 +1155,6 @@ x_libraries=NONE
 USE_OJDKBUILD_LIBZ=true
 OJDKBUILD_ZLIB_CFLAGS=`pkg-config ojdkbuild_zlib --cflags --msvc-syntax`
 OJDKBUILD_ZLIB_LDFLAGS=`pkg-config ojdkbuild_zlib --libs --msvc-syntax`
-OJDKBUILD_ZLIB_BUNDLE_LIB_PATH=`pkg-config ojdkbuild_zlib --variable=bundle_lib_path`
 USE_OJDKBUILD_NSS=true
 OJDKBUILD_NSS_CFLAGS=`pkg-config nss --cflags --msvc-syntax`
 OJDKBUILD_NSS_LDFLAGS=`pkg-config nss --libs --msvc-syntax`
