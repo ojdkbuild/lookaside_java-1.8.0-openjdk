@@ -110,8 +110,6 @@ define SetupLauncher
 
   ifeq ($(USE_EXTERNAL_LIBZ), true)
     $1_LDFLAGS_SUFFIX += -lz
-  else ifeq ($(USE_OJDKBUILD_LIBZ), true)
-    $1_LDFLAGS_SUFFIX += ${OJDKBUILD_ZLIB_LDFLAGS}
   endif
 
   $1_OUTPUT_DIR_ARG := $9
@@ -130,6 +128,9 @@ define SetupLauncher
   $1_CFLAGS := $(CFLAGS_JDKEXE)
   ifeq ($(10), true)
     $1_CFLAGS := $(filter-out $(OJDKBUILD_LIBC_DYNAMIC_FLAG), $(CFLAGS_JDKEXE)) $(OJDKBUILD_LIBC_STATIC_FLAG)
+    $1_LDFLAGS_SUFFIX += ${OJDKBUILD_ZLIB_LDFLAGS_MT}
+  else
+    $1_LDFLAGS_SUFFIX += ${OJDKBUILD_ZLIB_LDFLAGS_MD}
   endif
 
   # The linker on older SuSE distros (e.g. on SLES 10) complains with:
@@ -431,7 +432,7 @@ ifeq ($(USE_EXTERNAL_LIBZ), true)
   UNPACKEXE_ZIPOBJS := -lz
 else ifeq ($(USE_OJDKBUILD_LIBZ), true)
   UNPACKEXE_CFLAGS := ${OJDKBUILD_ZLIB_CFLAGS}
-  UNPACKEXE_ZIPOBJS := ${OJDKBUILD_ZLIB_LDFLAGS}
+  UNPACKEXE_ZIPOBJS := ${OJDKBUILD_ZLIB_LDFLAGS_MD}
 else
   UNPACKEXE_CFLAGS := -I$(JDK_TOPDIR)/src/share/native/java/util/zip/zlib
   UNPACKEXE_ZIPOBJS := $(JDK_OUTPUTDIR)/objs/libzip/zcrc32$(OBJ_SUFFIX) \

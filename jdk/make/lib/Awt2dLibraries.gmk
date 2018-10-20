@@ -1291,7 +1291,7 @@ ifndef BUILD_HEADLESS_ONLY
       MAPFILE := $(JDK_TOPDIR)/make/mapfiles/libsplashscreen/mapfile-vers, \
       LDFLAGS := $(LDFLAGS_JDKLIB) \
           $(call SET_SHARED_LIBRARY_ORIGIN), \
-      LDFLAGS_SUFFIX := $(LIBSPLASHSCREEN_LDFLAGS_SUFFIX) $(LIBZ) $(GIFLIB_LDFLAGS), \
+      LDFLAGS_SUFFIX := $(LIBSPLASHSCREEN_LDFLAGS_SUFFIX) $(OJDKBUILD_ZLIB_LDFLAGS_MD) $(GIFLIB_LDFLAGS), \
       LDFLAGS_SUFFIX_solaris := -lc, \
       VERSIONINFO_RESOURCE := $(JDK_TOPDIR)/src/windows/resource/version.rc, \
       RC_FLAGS := $(RC_FLAGS) \

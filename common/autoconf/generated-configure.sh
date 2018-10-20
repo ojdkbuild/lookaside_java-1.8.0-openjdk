@@ -648,7 +648,8 @@ LIBZIP_CAN_USE_MMAP
 USE_EXTERNAL_LIBZ
 USE_OJDKBUILD_LIBZ
 OJDKBUILD_ZLIB_CFLAGS
-OJDKBUILD_ZLIB_LDFLAGS
+OJDKBUILD_ZLIB_LDFLAGS_MD
+OJDKBUILD_ZLIB_LDFLAGS_MT
 USE_OJDKBUILD_NSS
 OJDKBUILD_NSS_CFLAGS
 OJDKBUILD_NSS_LDFLAGS
@@ -1154,7 +1155,8 @@ x_libraries=NONE
 # ojdkbuild
 USE_OJDKBUILD_LIBZ=true
 OJDKBUILD_ZLIB_CFLAGS=`pkg-config ojdkbuild_zlib --cflags --msvc-syntax`
-OJDKBUILD_ZLIB_LDFLAGS=`pkg-config ojdkbuild_zlib --libs --msvc-syntax`
+OJDKBUILD_ZLIB_LDFLAGS_MD=`pkg-config ojdkbuild_zlib_md --libs --msvc-syntax`
+OJDKBUILD_ZLIB_LDFLAGS_MT=`pkg-config ojdkbuild_zlib_mt --libs --msvc-syntax`
 USE_OJDKBUILD_NSS=true
 OJDKBUILD_NSS_CFLAGS=`pkg-config nss --cflags --msvc-syntax`
 OJDKBUILD_NSS_LDFLAGS=`pkg-config nss --libs --msvc-syntax`

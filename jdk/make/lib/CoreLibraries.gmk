@@ -258,7 +258,6 @@ ifeq ($(USE_EXTERNAL_LIBZ), true)
   LIBZ := -lz
   LIBZIP_EXCLUDES += zlib
 else ifeq ($(USE_OJDKBUILD_LIBZ), true)
-  LIBZ := ${OJDKBUILD_ZLIB_LDFLAGS}
   LIBZIP_EXCLUDES += zlib
   ZLIB_CPPFLAGS := ${OJDKBUILD_ZLIB_CFLAGS}
 else
@@ -295,7 +294,7 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBZIP, \
         $(EXPORT_ZIP_FUNCS), \
     LDFLAGS_windows := -export:ZIP_Open -export:ZIP_Close -export:ZIP_FindEntry \
         -export:ZIP_ReadEntry -export:ZIP_GetNextEntry -export:ZIP_CRC32 jvm.lib \
-        $(WIN_JAVA_LIB) $(LIBZ), \
+        $(WIN_JAVA_LIB) $(OJDKBUILD_ZLIB_LDFLAGS_MD), \
     LDFLAGS_SUFFIX_linux := -ljvm -ljava $(LIBZ), \
     LDFLAGS_SUFFIX_solaris := -ljvm -ljava $(LIBZ) -lc, \
     LDFLAGS_SUFFIX_aix := -ljvm -ljava $(LIBZ),\
@@ -468,7 +467,7 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBJLI, \
         advapi32.lib \
         comctl32.lib \
         user32.lib \
-        $(LIBZ), \
+        $(OJDKBUILD_ZLIB_LDFLAGS_MT), \
     VERSIONINFO_RESOURCE := $(JDK_TOPDIR)/src/windows/resource/version.rc, \
     RC_FLAGS := $(RC_FLAGS) \
         -D "JDK_FNAME=jli.dll" \
