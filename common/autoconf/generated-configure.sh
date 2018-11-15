@@ -17022,6 +17022,7 @@ $as_echo "$as_me: Please point to the VC/bin directory within the Visual Studio 
 
   if test "x$VS_ENV_CMD" = x; then
     VS100BASE="$VS100COMNTOOLS/../.."
+    VS_ENV_CMD=OJDKBUILD
     METHOD="VS100COMNTOOLS variable"
 
   windows_path="$VS100BASE"
@@ -17342,7 +17343,7 @@ $as_echo "$as_me: Warning: Installation is broken, SetEnv.Cmd is missing. Ignori
   fi
 
 
-  if test "x$VS_ENV_CMD" != x; then
+  if test "x$VS_ENV_CMD" != xOJDKBUILD; then
     # We have found a Visual Studio environment on disk, let's extract variables from the vsvars bat file.
 
   if test "x$OPENJDK_BUILD_OS_ENV" = "xwindows.cygwin"; then
