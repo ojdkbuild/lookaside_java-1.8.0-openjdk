@@ -646,30 +646,8 @@ LIBDL
 LIBM
 LIBZIP_CAN_USE_MMAP
 USE_EXTERNAL_LIBZ
-USE_OJDKBUILD_LIBZ
-OJDKBUILD_ZLIB_CFLAGS
-OJDKBUILD_ZLIB_LDFLAGS_MD
-OJDKBUILD_ZLIB_LDFLAGS_MT
-USE_OJDKBUILD_NSS
-OJDKBUILD_NSS_CFLAGS
-OJDKBUILD_NSS_LDFLAGS
-OJDKBUILD_NSS_BUNDLE_LIB_PATH
 USE_EXTERNAL_LIBGIF
-USE_OJDKBUILD_LIBGIF
-OJDKBUILD_GIFLIB_CFLAGS
-OJDKBUILD_GIFLIB_LDFLAGS
-OJDKBUILD_GIFLIB_BUNDLE_LIB_PATH
-USE_OJDKBUILD_LIBPNG
-OJDKBUILD_LIBPNG_CFLAGS
-OJDKBUILD_LIBPNG_LDFLAGS
-OJDKBUILD_LIBPNG_BUNDLE_LIB_PATH
 USE_EXTERNAL_LIBJPEG
-USE_OJDKBUILD_LIBJPEG
-OJDKBUILD_LIBJPEG_CFLAGS
-OJDKBUILD_LIBJPEG_LDFLAGS
-OJDKBUILD_LIBJPEG_BUNDLE_LIB_PATH
-OJDKBUILD_LIBC_STATIC_FLAG
-OJDKBUILD_LIBC_DYNAMIC_FLAG
 ALSA_LIBS
 ALSA_CFLAGS
 FREETYPE_BUNDLE_LIB_PATH
@@ -1151,31 +1129,6 @@ srcdir=
 verbose=
 x_includes=NONE
 x_libraries=NONE
-
-# ojdkbuild
-USE_OJDKBUILD_LIBZ=true
-OJDKBUILD_ZLIB_CFLAGS=`pkg-config ojdkbuild_zlib --cflags --msvc-syntax`
-OJDKBUILD_ZLIB_LDFLAGS_MD=`pkg-config ojdkbuild_zlib_md --libs --msvc-syntax`
-OJDKBUILD_ZLIB_LDFLAGS_MT=`pkg-config ojdkbuild_zlib_mt --libs --msvc-syntax`
-USE_OJDKBUILD_NSS=true
-OJDKBUILD_NSS_CFLAGS=`pkg-config nss --cflags --msvc-syntax`
-OJDKBUILD_NSS_LDFLAGS=`pkg-config nss --libs --msvc-syntax`
-OJDKBUILD_NSS_BUNDLE_LIB_PATH=`pkg-config nss --variable=bundle_lib_path`
-USE_OJDKBUILD_LIBGIF=true
-OJDKBUILD_GIFLIB_CFLAGS=`pkg-config ojdkbuild_giflib --cflags --msvc-syntax`
-OJDKBUILD_GIFLIB_LDFLAGS=`pkg-config ojdkbuild_giflib --libs --msvc-syntax`
-OJDKBUILD_GIFLIB_BUNDLE_LIB_PATH=`pkg-config ojdkbuild_giflib --variable=bundle_lib_path`
-USE_OJDKBUILD_LIBPNG=true
-OJDKBUILD_LIBPNG_CFLAGS=`pkg-config ojdkbuild_libpng --cflags --msvc-syntax`
-OJDKBUILD_LIBPNG_LDFLAGS=`pkg-config ojdkbuild_libpng --libs --msvc-syntax`
-OJDKBUILD_LIBPNG_BUNDLE_LIB_PATH=`pkg-config ojdkbuild_libpng --variable=bundle_lib_path`
-USE_OJDKBUILD_LIBJPEG=true
-OJDKBUILD_LIBJPEG_CFLAGS=`pkg-config ojdkbuild_libjpeg-turbo --cflags --msvc-syntax`
-OJDKBUILD_LIBJPEG_LDFLAGS=`pkg-config ojdkbuild_libjpeg-turbo --libs --msvc-syntax`
-OJDKBUILD_LIBJPEG_BUNDLE_LIB_PATH=`pkg-config ojdkbuild_libjpeg-turbo --variable=bundle_lib_path`
-OJDKBUILD_LIBC_STATIC_FLAG=${OJDKBUILD_LIBC_STATIC_FLAG}
-OJDKBUILD_LIBC_DYNAMIC_FLAG=${OJDKBUILD_LIBC_DYNAMIC_FLAG}
-# end ojdkbuild
 
 # Installation directory options.
 # These are left unexpanded so users can "make install exec_prefix=/foo"
@@ -30078,7 +30031,7 @@ $as_echo "$supports" >&6; }
       LDFLAGS_CXX_JDK="$LDFLAGS_CXX_JDK"
       ;;
     cl )
-      COMMON_CCXXFLAGS_JDK="$COMMON_CCXXFLAGS $COMMON_CCXXFLAGS_JDK -Zi $OJDKBUILD_LIBC_DYNAMIC_FLAG -Zc:wchar_t- -W3 -wd4800 \
+      COMMON_CCXXFLAGS_JDK="$COMMON_CCXXFLAGS $COMMON_CCXXFLAGS_JDK -Zi -MD -Zc:wchar_t- -W3 -wd4800 \
       -D_STATIC_CPPLIB -D_DISABLE_DEPRECATE_STATIC_CPPLIB -DWIN32_LEAN_AND_MEAN \
       -D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE \
       -DWIN32 -DIAL"
@@ -35515,6 +35468,8 @@ $as_echo "system not found" >&6; }
   else
     as_fn_error $? "Invalid value for --with-zlib: ${with_zlib}, use 'system' or 'bundled'" "$LINENO" 5
   fi
+
+
 
   ###############################################################################
   LIBZIP_CAN_USE_MMAP=true

@@ -742,11 +742,10 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBJPEG, \
     OPTIMIZATION := HIGHEST, \
     CFLAGS := $(CFLAGS_JDKLIB) \
         $(BUILD_LIBJPEG_CLOSED_INCLUDES) \
-        $(OJDKBUILD_LIBJPEG_CFLAGS), \
+        -I$(JDK_TOPDIR)/src/share/native/sun/awt/image/jpeg, \
     MAPFILE := $(BUILD_LIBJPEG_MAPFILE), \
     LDFLAGS := $(LDFLAGS_JDKLIB) \
-        $(call SET_SHARED_LIBRARY_ORIGIN) \
-        $(OJDKBUILD_LIBJPEG_LDFLAGS), \
+        $(call SET_SHARED_LIBRARY_ORIGIN), \
     LDFLAGS_windows := $(WIN_JAVA_LIB) jvm.lib, \
     LDFLAGS_SUFFIX := $(LDFLAGS_JDKLIB_SUFFIX), \
     VERSIONINFO_RESOURCE := $(JDK_TOPDIR)/src/windows/resource/version.rc, \
@@ -1189,21 +1188,12 @@ endif
 
 ifndef BUILD_HEADLESS_ONLY
   LIBSPLASHSCREEN_DIRS := \
+    $(JDK_TOPDIR)/src/share/native/sun/awt/image/jpeg \
+    $(JDK_TOPDIR)/src/share/native/sun/awt/libpng \
     $(JDK_TOPDIR)/src/share/native/sun/awt/splashscreen
-  ifneq ($(USE_OJDKBUILD_LIBPNG), true)
-    LIBSPLASHSCREEN_DIRS += \
-      $(JDK_TOPDIR)/src/share/native/sun/awt/libpng
-  endif
-  ifneq ($(USE_OJDKBUILD_LIBJPEG), true)
-    LIBSPLASHSCREEN_DIRS += \
-      $(JDK_TOPDIR)/src/share/native/sun/awt/image/jpeg
-  endif
 
   ifeq ($(USE_EXTERNAL_LIBGIF), true)
     GIFLIB_LDFLAGS := -lgif
-  else ifeq ($(USE_OJDKBUILD_LIBGIF), true)
-    GIFLIB_CFLAGS := $(OJDKBUILD_GIFLIB_CFLAGS)
-    GIFLIB_LDFLAGS := $(OJDKBUILD_GIFLIB_LDFLAGS)
   else
     LIBSPLASHSCREEN_DIRS += $(JDK_TOPDIR)/src/share/native/sun/awt/giflib
     GIFLIB_CFLAGS := -I$(JDK_TOPDIR)/src/share/native/sun/awt/giflib
@@ -1240,20 +1230,10 @@ ifndef BUILD_HEADLESS_ONLY
     LIBSPLASHSCREEN_CFLAGS += -DWITH_X11 $(X_CFLAGS)
   endif
 
-  ifeq ($(USE_OJDKBUILD_LIBPNG), true)
-    LIBSPLASHSCREEN_CFLAGS += $(OJDKBUILD_LIBPNG_CFLAGS) 
-  endif
-
-  ifeq ($(USE_OJDKBUILD_LIBJPEG), true)
-    LIBSPLASHSCREEN_CFLAGS += $(OJDKBUILD_LIBJPEG_CFLAGS) 
-  endif
-
   LIBSPLASHSCREEN_LDFLAGS_SUFFIX :=
 
   ifneq ($(USE_EXTERNAL_LIBZ), true)
-  ifneq ($(USE_OJDKBUILD_LIBZ), true)
     LIBSPLASHSCREEN_DIRS += $(JDK_TOPDIR)/src/share/native/java/util/zip/zlib
-  endif
     LIBSPLASHSCREEN_CFLAGS += $(ZLIB_CPPFLAGS)
   endif
 
@@ -1272,14 +1252,6 @@ ifndef BUILD_HEADLESS_ONLY
     LIBSPLASHSCREEN_LDFLAGS_SUFFIX += $(X_LIBS) -lX11 -lXext $(LIBM) -lpthread
   endif
 
-  ifeq ($(USE_OJDKBUILD_LIBPNG), true)
-    LIBSPLASHSCREEN_LDFLAGS_SUFFIX += $(OJDKBUILD_LIBPNG_LDFLAGS) 
-  endif
-
-  ifeq ($(USE_OJDKBUILD_LIBJPEG), true)
-    LIBSPLASHSCREEN_LDFLAGS_SUFFIX += $(OJDKBUILD_LIBJPEG_LDFLAGS) 
-  endif
-
   $(eval $(call SetupNativeCompilation,LIBSPLASHSCREEN, \
       LIBRARY := splashscreen, \
       OUTPUT_DIR := $(INSTALL_LIBRARIES_HERE), \
@@ -1291,7 +1263,7 @@ ifndef BUILD_HEADLESS_ONLY
       MAPFILE := $(JDK_TOPDIR)/make/mapfiles/libsplashscreen/mapfile-vers, \
       LDFLAGS := $(LDFLAGS_JDKLIB) \
           $(call SET_SHARED_LIBRARY_ORIGIN), \
-      LDFLAGS_SUFFIX := $(LIBSPLASHSCREEN_LDFLAGS_SUFFIX) $(OJDKBUILD_ZLIB_LDFLAGS_MD) $(GIFLIB_LDFLAGS), \
+      LDFLAGS_SUFFIX := $(LIBSPLASHSCREEN_LDFLAGS_SUFFIX) $(LIBZ) $(GIFLIB_LDFLAGS), \
       LDFLAGS_SUFFIX_solaris := -lc, \
       VERSIONINFO_RESOURCE := $(JDK_TOPDIR)/src/windows/resource/version.rc, \
       RC_FLAGS := $(RC_FLAGS) \

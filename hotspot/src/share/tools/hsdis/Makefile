@@ -138,7 +138,7 @@ else
 ## OS = Windows ##
 OS		= windows
 CC		= gcc
-CFLAGS		+=  /nologo $(OJDKBUILD_LIBC_DYNAMIC_FLAG) /W3 /WX /O2 /Fo$(@:.dll=.obj) /Gi-
+CFLAGS		+=  /nologo /MD /W3 /WX /O2 /Fo$(@:.dll=.obj) /Gi-
 CFLAGS		+= LIBARCH=\"$(LIBARCH)\"
 DLDFLAGS	+= /dll /subsystem:windows /incremental:no \
 			/export:decode_instruction
