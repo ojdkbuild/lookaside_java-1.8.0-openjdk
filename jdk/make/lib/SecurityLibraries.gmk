@@ -219,7 +219,7 @@ BUILD_LIBRARIES += $(BUILD_LIBJ2PKCS11)
 ifeq ($(ENABLE_INTREE_EC), yes)
 
   BUILD_LIBSUNEC_FLAGS := -I$(JDK_TOPDIR)/src/share/native/sun/security/ec \
-      -I$(JDK_TOPDIR)/src/share/native/sun/security/ec/impl
+      $(NSS_CFLAGS) -DSYSTEM_NSS -DNSS_ENABLE_ECC
 
   #
   # On sol-sparc...all libraries are compiled with -xregs=no%appl
@@ -235,8 +235,7 @@ ifeq ($(ENABLE_INTREE_EC), yes)
   $(eval $(call SetupNativeCompilation,BUILD_LIBSUNEC, \
       LIBRARY := sunec, \
       OUTPUT_DIR := $(INSTALL_LIBRARIES_HERE), \
-      SRC := $(JDK_TOPDIR)/src/share/native/sun/security/ec \
-          $(JDK_TOPDIR)/src/share/native/sun/security/ec/impl, \
+      SRC := $(JDK_TOPDIR)/src/share/native/sun/security/ec, \
       LANG := C++, \
       OPTIMIZATION := LOW, \
       CFLAGS := $(filter-out $(ECC_JNI_SOLSPARC_FILTER), $(CFLAGS_JDKLIB)) \
@@ -245,7 +244,7 @@ ifeq ($(ENABLE_INTREE_EC), yes)
       CXXFLAGS := $(filter-out $(ECC_JNI_SOLSPARC_FILTER), $(CXXFLAGS_JDKLIB)) \
           $(BUILD_LIBSUNEC_FLAGS), \
       MAPFILE := $(JDK_TOPDIR)/make/mapfiles/libsunec/mapfile-vers, \
-      LDFLAGS := $(LDFLAGS_JDKLIB) $(LDFLAGS_CXX_JDK), \
+      LDFLAGS := $(LDFLAGS_JDKLIB) $(LDFLAGS_CXX_JDK) $(NSS_LIBS), \
       LDFLAGS_macosx := $(call SET_SHARED_LIBRARY_ORIGIN), \
       LDFLAGS_SUFFIX := $(LIBCXX), \
       LDFLAGS_SUFFIX_linux := -lc, \
