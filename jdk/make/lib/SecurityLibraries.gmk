@@ -241,7 +241,7 @@ ifeq ($(ENABLE_INTREE_EC), yes)
       OPTIMIZATION := LOW, \
       CFLAGS := $(filter-out $(ECC_JNI_SOLSPARC_FILTER), $(CFLAGS_JDKLIB)) \
           $(BUILD_LIBSUNEC_FLAGS) \
-          -DMP_API_COMPATIBLE -DNSS_ECC_MORE_THAN_SUITE_B, \
+          -DMP_API_COMPATIBLE, \
       CXXFLAGS := $(filter-out $(ECC_JNI_SOLSPARC_FILTER), $(CXXFLAGS_JDKLIB)) \
           $(BUILD_LIBSUNEC_FLAGS), \
       MAPFILE := $(JDK_TOPDIR)/make/mapfiles/libsunec/mapfile-vers, \
