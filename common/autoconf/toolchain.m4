@@ -229,10 +229,10 @@ AC_DEFUN_ONCE([TOOLCHAIN_PRE_DETECTION],
     TOOLCHAIN_SETUP_VISUAL_STUDIO_ENV
     # Reset path to VS_PATH. It will include everything that was on PATH at the time we
     # ran TOOLCHAIN_SETUP_VISUAL_STUDIO_ENV.
-    PATH="$VS_PATH"
+    # PATH="$VS_PATH"
     # The microsoft toolchain also requires INCLUDE and LIB to be set.
-    export INCLUDE="$VS_INCLUDE"
-    export LIB="$VS_LIB"
+    # export INCLUDE="$VS_INCLUDE"
+    # export LIB="$VS_LIB"
   fi
 
   # Before we locate the compilers, we need to sanitize the Xcode build environment
