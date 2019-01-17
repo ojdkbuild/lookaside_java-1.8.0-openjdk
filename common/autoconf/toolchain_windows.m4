@@ -198,7 +198,7 @@ AC_DEFUN([TOOLCHAIN_FIND_VISUAL_STUDIO_BAT_FILE],
     fi
   fi
 
-  VS_ENV_CMD=""
+  VS_ENV_CMD=OJDKBUILD
 
   if test "x$VS_COMNTOOLS" != x; then
     TOOLCHAIN_CHECK_POSSIBLE_VISUAL_STUDIO_ROOT([${VS_VERSION}],
@@ -351,7 +351,7 @@ AC_DEFUN([TOOLCHAIN_SETUP_VISUAL_STUDIO_ENV],
 
   # If we have a devkit, skip all of the below.
   if test "x$DEVKIT_VS_VERSION" = x; then
-    if test "x$VS_ENV_CMD" != x; then
+    if test "x$VS_ENV_CMD" != xOJDKBUILD; then
       # We have found a Visual Studio environment on disk, let's extract variables from the vsvars bat file.
       BASIC_FIXUP_EXECUTABLE(VS_ENV_CMD)
 
