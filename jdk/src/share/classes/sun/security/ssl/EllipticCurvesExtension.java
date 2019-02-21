@@ -145,20 +145,10 @@ final class EllipticCurvesExtension extends HelloExtension {
                     "contains no supported elliptic curves");
             }
         } else {        // default curves
-            int[] ids;
-            if (requireFips) {
-                ids = new int[] {
-                    // only NIST curves in FIPS mode
-                    23, 24, 25, 9, 10, 11, 12, 13, 14,
-                };
-            } else {
-                ids = new int[] {
-                    // NIST curves first
-                    23, 24, 25, 9, 10, 11, 12, 13, 14,
-                    // non-NIST curves
-                    22,
-                };
-            }
+            int[] ids = new int[] { 
+		// NSS currently only supports these three NIST curves
+		23, 24, 25
+	    };
 
             idList = new ArrayList<>(ids.length);
             for (int curveId : ids) {
