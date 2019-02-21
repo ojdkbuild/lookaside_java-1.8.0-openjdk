@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 1997, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014 Red Hat Inc.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -61,13 +62,13 @@ public final class DHParameterGenerator extends AlgorithmParameterGeneratorSpi {
 
     private static void checkKeySize(int keysize)
             throws InvalidParameterException {
-        boolean supported = ((keysize == 2048) || (keysize == 3072) ||
+        boolean supported = ((keysize == 2048) || (keysize == 3072) || (keysize == 4096) ||
             ((keysize >= 512) && (keysize <= 1024) && ((keysize & 0x3F) == 0)));
 
         if (!supported) {
             throw new InvalidParameterException(
                     "DH key size must be multiple of 64 and range " +
-                    "from 512 to 1024 (inclusive), or 2048, 3072. " +
+                    "from 512 to 1024 (inclusive), or 2048, 3072, 4096. " +
                     "The specific key size " + keysize + " is not supported");
         }
     }

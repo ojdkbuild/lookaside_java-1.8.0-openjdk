@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2005, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014 Red Hat Inc.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -58,7 +59,7 @@ public class TestExponentSize {
      */
     private enum Sizes {
         two56(256), three84(384), five12(512), seven68(768), ten24(1024),
-        twenty48(2048);
+        twenty48(2048), forty96(4096);
 
         private final int intSize;
         private final BigInteger bigIntValue;
@@ -129,6 +130,19 @@ public class TestExponentSize {
         kpg.initialize(new DHParameterSpec(p, g, Sizes.five12.getIntSize()));
         kp = kpg.generateKeyPair();
         checkKeyPair(kp, Sizes.twenty48, Sizes.five12);
+
+        kpg.initialize(Sizes.forty96.getIntSize());
+        kp = kpg.generateKeyPair();
+        checkKeyPair(kp, Sizes.forty96, Sizes.twenty48);
+
+        publicKey = (DHPublicKey)kp.getPublic();
+        p = publicKey.getParams().getP();
+        g = publicKey.getParams().getG();
+
+        // test w/ all values specified
+        kpg.initialize(new DHParameterSpec(p, g, Sizes.ten24.getIntSize()));
+        kp = kpg.generateKeyPair();
+        checkKeyPair(kp, Sizes.forty96, Sizes.ten24);
 
         System.out.println("OK");
     }
