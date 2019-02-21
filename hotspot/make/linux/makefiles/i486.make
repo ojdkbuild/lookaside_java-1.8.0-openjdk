@@ -24,10 +24,13 @@
 
 # TLS helper, assembled from .s file
 
-# The copied fdlibm routines in sharedRuntimeTrig.o must not be optimized
-OPT_CFLAGS/sharedRuntimeTrig.o = $(OPT_CFLAGS/NOOPT)
-# The copied fdlibm routines in sharedRuntimeTrans.o must not be optimized
-OPT_CFLAGS/sharedRuntimeTrans.o = $(OPT_CFLAGS/NOOPT)
+ifeq ($(OPT_CFLAGS_NO_FMA),)
+  OPT_CFLAGS/sharedRuntimeTrig.o = $(OPT_CFLAGS/NOOPT)
+  OPT_CFLAGS/sharedRuntimeTrans.o = $(OPT_CFLAGS/NOOPT)
+else
+  OPT_CFLAGS/sharedRuntimeTrig.o = $(OPT_CFLAGS/SPEED) $(OPT_CFLAGS_NO_FMA)
+  OPT_CFLAGS/sharedRuntimeTrans.o = $(OPT_CFLAGS/SPEED) $(OPT_CFLAGS_NO_FMA)
+endif
 # Must also specify if CPU is little endian
 CFLAGS += -DVM_LITTLE_ENDIAN
 
