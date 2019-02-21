@@ -30,10 +30,13 @@ ifeq ($(USE_CLANG), true)
   WARNING_FLAGS += -Wno-undef
 endif
 
-# The copied fdlibm routines in sharedRuntimeTrig.o must not be optimized
-OPT_CFLAGS/sharedRuntimeTrig.o = $(OPT_CFLAGS/NOOPT)
-# The copied fdlibm routines in sharedRuntimeTrans.o must not be optimized
-OPT_CFLAGS/sharedRuntimeTrans.o = $(OPT_CFLAGS/NOOPT)
+ifeq ($(OPT_CFLAGS_NO_FMA),)
+  OPT_CFLAGS/sharedRuntimeTrig.o = $(OPT_CFLAGS/NOOPT)
+  OPT_CFLAGS/sharedRuntimeTrans.o = $(OPT_CFLAGS/NOOPT)
+else
+  OPT_CFLAGS/sharedRuntimeTrig.o = $(OPT_CFLAGS/SPEED) $(OPT_CFLAGS_NO_FMA)
+  OPT_CFLAGS/sharedRuntimeTrans.o = $(OPT_CFLAGS/SPEED) $(OPT_CFLAGS_NO_FMA)
+endif
 
 # Specify that the CPU is little endian, if necessary
 ifeq ($(ZERO_ENDIANNESS), little)
