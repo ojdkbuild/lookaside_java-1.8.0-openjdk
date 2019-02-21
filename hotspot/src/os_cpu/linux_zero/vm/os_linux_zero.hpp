@@ -54,6 +54,12 @@
                   "std %0, %1\n"
                   : "=&f"(tmp), "=Q"(*(volatile double*)dst)
                   : "Q"(*(volatile double*)src));
+#elif defined(__ARM_ARCH_7A__)
+    jlong tmp;
+    asm volatile ("ldrexd  %0, [%1]\n"
+                  : "=r"(tmp)
+                  : "r"(src), "m"(src));
+    *(jlong *) dst = tmp;
 #else
     *(jlong *) dst = *(jlong *) src;
 #endif
