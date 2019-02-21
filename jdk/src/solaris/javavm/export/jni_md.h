@@ -36,6 +36,11 @@
   #define JNIEXPORT
   #define JNIIMPORT
 #endif
+#if (defined(__GNUC__)) || __has_attribute(unused)
+  #define UNUSED(x) UNUSED_ ## x __attribute__((__unused__))
+#else
+  #define UNUSED(x) UNUSED_ ## x
+#endif
 
 #define JNICALL
 
