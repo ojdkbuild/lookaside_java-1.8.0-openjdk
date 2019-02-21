@@ -162,7 +162,7 @@ abstract class TrustManagerFactoryImpl extends TrustManagerFactorySpi {
          * Try:
          *      javax.net.ssl.trustStore  (if this variable exists, stop)
          *      jssecacerts
-         *      cacerts
+         *      cacerts (system and local)
          *
          * If none exists, we use an empty keystore.
          */
@@ -174,14 +174,14 @@ abstract class TrustManagerFactoryImpl extends TrustManagerFactorySpi {
                     storeFile = new File(storeFileName);
                     fis = getFileInputStream(storeFile);
                 } else {
-                    /* Check system cacerts DB first; /etc/pki/java/cacerts */
-                    storeFile = new File(sep + "etc" + sep + "pki" + sep
-                                         + "java" + sep + "cacerts");
+                    String javaHome = props.get("javaHome");
+                    storeFile = new File(javaHome + sep + "lib" + sep
+                                         + "security" + sep +
+                                         "jssecacerts");
                     if ((fis = getFileInputStream(storeFile)) == null) {
-                        String javaHome = props.get("javaHome");
-                        storeFile = new File(javaHome + sep + "lib" + sep
-                                             + "security" + sep +
-                                             "jssecacerts");
+                        /* Check system cacerts DB first; /etc/pki/java/cacerts */
+                        storeFile = new File(sep + "etc" + sep + "pki" + sep
+                                             + "java" + sep + "cacerts");
                         if ((fis = getFileInputStream(storeFile)) == null) {
                             storeFile = new File(javaHome + sep + "lib" + sep
                                                  + "security" + sep +
