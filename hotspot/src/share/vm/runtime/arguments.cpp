@@ -1285,7 +1285,7 @@ void Arguments::set_cms_and_parnew_gc_flags() {
     // NewSize was set on the command line and it is larger than
     // preferred_max_new_size.
     if (!FLAG_IS_DEFAULT(NewSize)) {   // NewSize explicitly set at command-line
-      FLAG_SET_ERGO(uintx, MaxNewSize, MAX2(NewSize, preferred_max_new_size));
+      FLAG_SET_ERGO(uintx, MaxNewSize, MAX2((size_t)NewSize, preferred_max_new_size));
     } else {
       FLAG_SET_ERGO(uintx, MaxNewSize, preferred_max_new_size);
     }
@@ -1310,8 +1310,8 @@ void Arguments::set_cms_and_parnew_gc_flags() {
       // Unless explicitly requested otherwise, make young gen
       // at least min_new, and at most preferred_max_new_size.
       if (FLAG_IS_DEFAULT(NewSize)) {
-        FLAG_SET_ERGO(uintx, NewSize, MAX2(NewSize, min_new));
-        FLAG_SET_ERGO(uintx, NewSize, MIN2(preferred_max_new_size, NewSize));
+        FLAG_SET_ERGO(uintx, NewSize, MAX2((size_t)NewSize, min_new));
+        FLAG_SET_ERGO(uintx, NewSize, MIN2(preferred_max_new_size, (size_t)NewSize));
         if (PrintGCDetails && Verbose) {
           // Too early to use gclog_or_tty
           tty->print_cr("CMS ergo set NewSize: " SIZE_FORMAT, NewSize);
@@ -1321,7 +1321,7 @@ void Arguments::set_cms_and_parnew_gc_flags() {
       // so it's NewRatio x of NewSize.
       if (FLAG_IS_DEFAULT(OldSize)) {
         if (max_heap > NewSize) {
-          FLAG_SET_ERGO(uintx, OldSize, MIN2(NewRatio*NewSize, max_heap - NewSize));
+          FLAG_SET_ERGO(uintx, OldSize, MIN2((size_t)(NewRatio*NewSize), max_heap - NewSize));
           if (PrintGCDetails && Verbose) {
             // Too early to use gclog_or_tty
             tty->print_cr("CMS ergo set OldSize: " SIZE_FORMAT, OldSize);
