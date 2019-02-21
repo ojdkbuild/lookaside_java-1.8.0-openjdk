@@ -958,6 +958,47 @@ AC_DEFUN_ONCE([LIB_SETUP_MISC_LIBS],
   LIBDL="$LIBS"
   AC_SUBST(LIBDL)
   LIBS="$save_LIBS"
+
+  ###############################################################################
+  #
+  # Check for the NSS libraries
+  #
+
+  AC_MSG_CHECKING([whether to build the Sun EC provider against the system NSS libraries])
+
+  # default is bundled
+  DEFAULT_SYSTEM_NSS=no
+
+  AC_ARG_ENABLE([system-nss], [AS_HELP_STRING([--enable-system-nss],
+     [build the SunEC provider using the system NSS libraries @<:@disabled@:>@])],
+  [
+    case "${enableval}" in
+      yes)
+        system_nss=yes
+        ;;
+      *)
+        system_nss=no
+        ;;
+    esac
+  ],
+  [
+    system_nss=${DEFAULT_SYSTEM_NSS}
+  ])
+  AC_MSG_RESULT([$system_nss])
+
+  if test "x${system_nss}" = "xyes"; then
+      PKG_CHECK_MODULES(NSS, nss-softokn >= 3.16.1, [NSS_SOFTOKN_FOUND=yes], [NSS_SOFTOKN_FOUND=no])
+      if test "x${NSS_SOFTOKN_FOUND}" = "xyes"; then
+          NSS_LIBS="$NSS_LIBS -lfreebl";
+	  USE_EXTERNAL_NSS=true
+      else
+	  AC_MSG_ERROR([--enable-system-nss specified, but NSS not found.])
+      fi
+  else
+      USE_EXTERNAL_NSS=false
+  fi
+  AC_SUBST(USE_EXTERNAL_NSS)
+
 ])
 
 AC_DEFUN_ONCE([LIB_SETUP_STATIC_LINK_LIBSTDCPP],
