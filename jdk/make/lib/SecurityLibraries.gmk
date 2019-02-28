@@ -218,17 +218,8 @@ BUILD_LIBRARIES += $(BUILD_LIBJ2PKCS11)
 
 ifeq ($(ENABLE_INTREE_EC), yes)
 
-  BUILD_LIBSUNEC_FLAGS := -I$(JDK_TOPDIR)/src/share/native/sun/security/ec
-
-  ifeq ($(USE_EXTERNAL_NSS), true)
-    BUILD_LIBSUNEC_IMPL_DIR :=
-    BUILD_LIBSUNEC_FLAGS += $(NSS_CFLAGS) -DSYSTEM_NSS -DNSS_ENABLE_ECC
-  else
-    BUILD_LIBSUNEC_IMPL_DIR := \
-      $(JDK_TOPDIR)/src/share/native/sun/security/ec/impl
-    BUILD_LIBSUNEC_FLAGS += \
+  BUILD_LIBSUNEC_FLAGS := -I$(JDK_TOPDIR)/src/share/native/sun/security/ec \
       -I$(JDK_TOPDIR)/src/share/native/sun/security/ec/impl
-  endif
 
   #
   # On sol-sparc...all libraries are compiled with -xregs=no%appl
@@ -244,8 +235,8 @@ ifeq ($(ENABLE_INTREE_EC), yes)
   $(eval $(call SetupNativeCompilation,BUILD_LIBSUNEC, \
       LIBRARY := sunec, \
       OUTPUT_DIR := $(INSTALL_LIBRARIES_HERE), \
-      SRC := $(JDK_TOPDIR)/src/share/native/sun/security/ec/ECC_JNI.cpp \
-          $(BUILD_LIBSUNEC_IMPL_DIR), \
+      SRC := $(JDK_TOPDIR)/src/share/native/sun/security/ec \
+          $(JDK_TOPDIR)/src/share/native/sun/security/ec/impl, \
       LANG := C++, \
       OPTIMIZATION := LOW, \
       CFLAGS := $(filter-out $(ECC_JNI_SOLSPARC_FILTER), $(CFLAGS_JDKLIB)) \
@@ -254,12 +245,11 @@ ifeq ($(ENABLE_INTREE_EC), yes)
       CXXFLAGS := $(filter-out $(ECC_JNI_SOLSPARC_FILTER), $(CXXFLAGS_JDKLIB)) \
           $(BUILD_LIBSUNEC_FLAGS), \
       MAPFILE := $(JDK_TOPDIR)/make/mapfiles/libsunec/mapfile-vers, \
-      LDFLAGS := $(subst -Xlinker --as-needed,, \
-        $(subst -Wl$(COMMA)--as-needed,, $(LDFLAGS_JDKLIB))) $(LDFLAGS_CXX_JDK), \
+      LDFLAGS := $(LDFLAGS_JDKLIB) $(LDFLAGS_CXX_JDK), \
       LDFLAGS_macosx := $(call SET_SHARED_LIBRARY_ORIGIN), \
       LDFLAGS_SUFFIX := $(LIBCXX), \
-      LDFLAGS_SUFFIX_linux := -lc $(NSS_LIBS), \
-      LDFLAGS_SUFFIX_solaris := -lc $(NSS_LIBS), \
+      LDFLAGS_SUFFIX_linux := -lc, \
+      LDFLAGS_SUFFIX_solaris := -lc, \
       VERSIONINFO_RESOURCE := $(JDK_TOPDIR)/src/windows/resource/version.rc, \
       RC_FLAGS := $(RC_FLAGS) \
           -D "JDK_FNAME=sunec.dll" \

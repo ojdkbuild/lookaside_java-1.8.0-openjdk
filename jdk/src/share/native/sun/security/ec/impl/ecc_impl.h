@@ -45,19 +45,7 @@ extern "C" {
 #endif
 
 #include <sys/types.h>
-
-#ifdef SYSTEM_NSS
-#include <secitem.h>
-#include <secerr.h>
-#include <keythi.h>
-#ifdef LEGACY_NSS
-#include <softoken.h>
-#else
-#include <blapi.h>
-#endif
-#else
 #include "ecl-exp.h"
-#endif
 
 /*
  * Multi-platform definitions
@@ -108,7 +96,6 @@ typedef enum boolean { B_FALSE, B_TRUE } boolean_t;
  * Various structures and definitions from NSS are here.
  */
 
-#ifndef SYSTEM_NSS
 #ifdef _KERNEL
 #define PORT_ArenaAlloc(a, n, f)        kmem_alloc((n), (f))
 #define PORT_ArenaZAlloc(a, n, f)       kmem_zalloc((n), (f))
@@ -143,12 +130,9 @@ typedef enum boolean { B_FALSE, B_TRUE } boolean_t;
 #define PORT_Memcpy(t, f, l)            memcpy((t), (f), (l))
 #endif
 
-#endif
-
 #define CHECK_OK(func) if (func == NULL) goto cleanup
 #define CHECK_SEC_OK(func) if (SECSuccess != (rv = func)) goto cleanup
 
-#ifndef SYSTEM_NSS
 typedef enum {
         siBuffer = 0,
         siClearDataBuffer = 1,
@@ -245,7 +229,6 @@ typedef enum _SECStatus {
         SECFailure = -1,
         SECSuccess = 0
 } SECStatus;
-#endif
 
 #ifdef _KERNEL
 #define RNG_GenerateGlobalRandomBytes(p,l) ecc_knzero_random_generator((p), (l))
@@ -265,20 +248,11 @@ typedef enum _SECStatus {
 extern int ecc_knzero_random_generator(uint8_t *, size_t);
 extern ulong_t soft_nzero_random_generator(uint8_t *, ulong_t);
 
-#ifdef SYSTEM_NSS
-#define EC_DecodeParams(a,b,c) EC_DecodeParams(a,b)
-#define EC_NewKey(a,b,c,d,e) EC_NewKeyFromSeed(a,b,c,d)
-#define ECDSA_SignDigest(a,b,c,d,e,f,g) ECDSA_SignDigestWithSeed(a,b,c,d,e)
-#define ECDSA_VerifyDigest(a,b,c,d) ECDSA_VerifyDigest(a,b,c)
-#define ECDH_Derive(a,b,c,d,e,f) ECDH_Derive(a,b,c,d,e)
-#else
 extern SECStatus EC_DecodeParams(const SECItem *, ECParams **, int);
-
 extern SECItem * SECITEM_AllocItem(PRArenaPool *, SECItem *, unsigned int, int);
 extern SECStatus SECITEM_CopyItem(PRArenaPool *, SECItem *, const SECItem *,
     int);
 extern void SECITEM_FreeItem(SECItem *, boolean_t);
-
 /* This function has been modified to accept an array of random bytes */
 extern SECStatus EC_NewKey(ECParams *ecParams, ECPrivateKey **privKey,
     const unsigned char* random, int randomlen, int);
@@ -289,7 +263,6 @@ extern SECStatus ECDSA_VerifyDigest(ECPublicKey *, const SECItem *,
     const SECItem *, int);
 extern SECStatus ECDH_Derive(SECItem *, ECParams *, SECItem *, boolean_t,
     SECItem *, int);
-#endif
 
 #ifdef  __cplusplus
 }
