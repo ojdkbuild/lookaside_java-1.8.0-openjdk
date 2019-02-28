@@ -134,17 +134,8 @@ JNICALL Java_sun_security_ec_ECKeyPairGenerator_generateECKeyPair
     env->GetByteArrayRegion(seed, 0, jSeedLength, pSeedBuffer);
 
     // Generate the new keypair (using the supplied seed)
-#ifdef SYSTEM_NSS
-    if (RNG_RandomUpdate((unsigned char *) pSeedBuffer, jSeedLength)
-	!= SECSuccess) {
-	ThrowException(env, KEY_EXCEPTION);
-	goto cleanup;
-    }
-    if (EC_NewKey(ecparams, &privKey) != SECSuccess) {
-#else
     if (EC_NewKey(ecparams, &privKey, (unsigned char *) pSeedBuffer,
         jSeedLength, 0) != SECSuccess) {
-#endif
         ThrowException(env, KEY_EXCEPTION);
         goto cleanup;
     }
@@ -276,18 +267,8 @@ JNICALL Java_sun_security_ec_ECDSASignature_signDigest
     env->GetByteArrayRegion(seed, 0, jSeedLength, pSeedBuffer);
 
     // Sign the digest (using the supplied seed)
-#ifdef SYSTEM_NSS
-    if (RNG_RandomUpdate((unsigned char *) pSeedBuffer, jSeedLength)
-	!= SECSuccess) {
-	ThrowException(env, KEY_EXCEPTION);
-	goto cleanup;
-    }
-    if (ECDSA_SignDigest(&privKey, &signature_item, &digest_item)
-	!= SECSuccess) {
-#else
     if (ECDSA_SignDigest(&privKey, &signature_item, &digest_item,
         (unsigned char *) pSeedBuffer, jSeedLength, 0, timing) != SECSuccess) {
-#endif
         ThrowException(env, KEY_EXCEPTION);
         goto cleanup;
     }
@@ -518,9 +499,6 @@ JNICALL Java_sun_security_ec_SunEC_initialize
     if (SECOID_Init() != SECSuccess) {
 	ThrowException(env, INTERNAL_ERROR);
     }
-    if (RNG_RNGInit() != SECSuccess) {
-	ThrowException(env, INTERNAL_ERROR);
-    }
 #endif
 }
 
@@ -529,7 +507,6 @@ JNICALL Java_sun_security_ec_SunEC_cleanup
   (JNIEnv *env, jclass UNUSED(clazz))
 {
 #ifdef SYSTEM_NSS
-    RNG_RNGShutdown();
     if (SECOID_Shutdown() != SECSuccess) {
 	ThrowException(env, INTERNAL_ERROR);
     }

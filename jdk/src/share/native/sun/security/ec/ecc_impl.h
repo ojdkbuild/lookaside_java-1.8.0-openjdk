@@ -254,9 +254,7 @@ typedef enum _SECStatus {
  This function is no longer required because the random bytes are now
  supplied by the caller. Force a failure.
 */
-#ifndef SYSTEM_NSS
 #define RNG_GenerateGlobalRandomBytes(p,l) SECFailure
-#endif
 #endif
 #define CHECK_MPI_OK(func) if (MP_OKAY > (err = func)) goto cleanup
 #define MP_TO_SEC_ERROR(err)
@@ -269,6 +267,8 @@ extern ulong_t soft_nzero_random_generator(uint8_t *, ulong_t);
 
 #ifdef SYSTEM_NSS
 #define EC_DecodeParams(a,b,c) EC_DecodeParams(a,b)
+#define EC_NewKey(a,b,c,d,e) EC_NewKey(a,b)
+#define ECDSA_SignDigest(a,b,c,d,e,f,g) ECDSA_SignDigest(a,b,c)
 #define ECDSA_VerifyDigest(a,b,c,d) ECDSA_VerifyDigest(a,b,c)
 #define ECDH_Derive(a,b,c,d,e,f) ECDH_Derive(a,b,c,d,e)
 #else
