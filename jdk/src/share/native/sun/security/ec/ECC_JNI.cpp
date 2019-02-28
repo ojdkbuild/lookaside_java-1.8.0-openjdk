@@ -121,6 +121,13 @@ JNICALL Java_sun_security_ec_ECKeyPairGenerator_generateECKeyPair
         goto cleanup;
     }
 
+#ifdef SYSTEM_NSS
+    if (SECOID_Init() != SECSuccess) {
+	ThrowException(env, INTERNAL_ERROR);
+	goto cleanup;
+    }
+#endif
+
     // Fill a new ECParams using the supplied OID
     if (EC_DecodeParams(&params_item, &ecparams, 0) != SECSuccess) {
         /* bad curve OID */
@@ -176,6 +183,11 @@ cleanup:
         if (params_item.data) {
             env->ReleaseByteArrayElements(encodedParams,
                 (jbyte *) params_item.data, JNI_ABORT);
+#ifdef SYSTEM_NSS
+	    if (SECOID_Shutdown() != SECSuccess) {
+		ThrowException(env, INTERNAL_ERROR);
+	    }
+#endif
         }
         if (ecparams) {
             FreeECParams(ecparams, true);
@@ -241,6 +253,13 @@ JNICALL Java_sun_security_ec_ECDSASignature_signDigest
         goto cleanup;
     }
 
+#ifdef SYSTEM_NSS
+    if (SECOID_Init() != SECSuccess) {
+	ThrowException(env, INTERNAL_ERROR);
+	goto cleanup;
+    }
+#endif
+
     // Fill a new ECParams using the supplied OID
     if (EC_DecodeParams(&params_item, &ecparams, 0) != SECSuccess) {
         /* bad curve OID */
@@ -288,6 +307,11 @@ cleanup:
         if (params_item.data) {
             env->ReleaseByteArrayElements(encodedParams,
                 (jbyte *) params_item.data, JNI_ABORT);
+#ifdef SYSTEM_NSS
+	    if (SECOID_Shutdown() != SECSuccess) {
+		ThrowException(env, INTERNAL_ERROR);
+	    }
+#endif
         }
         if (privKey.privateValue.data) {
             env->ReleaseByteArrayElements(privateKey,
@@ -354,6 +378,13 @@ JNICALL Java_sun_security_ec_ECDSASignature_verifySignedDigest
         goto cleanup;
     }
 
+#ifdef SYSTEM_NSS
+    if (SECOID_Init() != SECSuccess) {
+	ThrowException(env, INTERNAL_ERROR);
+	goto cleanup;
+    }
+#endif
+
     // Fill a new ECParams using the supplied OID
     if (EC_DecodeParams(&params_item, &ecparams, 0) != SECSuccess) {
         /* bad curve OID */
@@ -377,6 +408,11 @@ cleanup:
         if (params_item.data) {
             env->ReleaseByteArrayElements(encodedParams,
                 (jbyte *) params_item.data, JNI_ABORT);
+#ifdef SYSTEM_NSS
+	    if (SECOID_Shutdown() != SECSuccess) {
+		ThrowException(env, INTERNAL_ERROR);
+	    }
+#endif
 	}
 
         if (pubKey.publicValue.data)
@@ -438,6 +474,13 @@ JNICALL Java_sun_security_ec_ECDHKeyAgreement_deriveKey
         goto cleanup;
     }
 
+#ifdef SYSTEM_NSS
+    if (SECOID_Init() != SECSuccess) {
+	ThrowException(env, INTERNAL_ERROR);
+	goto cleanup;
+    }
+#endif
+
     // Fill a new ECParams using the supplied OID
     if (EC_DecodeParams(&params_item, &ecparams, 0) != SECSuccess) {
         /* bad curve OID */
@@ -482,6 +525,11 @@ cleanup:
         if (params_item.data) {
             env->ReleaseByteArrayElements(encodedParams,
                 (jbyte *) params_item.data, JNI_ABORT);
+#ifdef SYSTEM_NSS
+	    if (SECOID_Shutdown() != SECSuccess) {
+		ThrowException(env, INTERNAL_ERROR);
+	    }
+#endif
 	}
 
         if (ecparams)
@@ -489,28 +537,6 @@ cleanup:
     }
 
     return jSecret;
-}
-
-JNIEXPORT void
-JNICALL Java_sun_security_ec_SunEC_initialize
-  (JNIEnv *env, jclass UNUSED(clazz))
-{
-#ifdef SYSTEM_NSS
-    if (SECOID_Init() != SECSuccess) {
-	ThrowException(env, INTERNAL_ERROR);
-    }
-#endif
-}
-
-JNIEXPORT void
-JNICALL Java_sun_security_ec_SunEC_cleanup
-  (JNIEnv *env, jclass UNUSED(clazz))
-{
-#ifdef SYSTEM_NSS
-    if (SECOID_Shutdown() != SECSuccess) {
-	ThrowException(env, INTERNAL_ERROR);
-    }
-#endif
 }
 
 } /* extern "C" */
