@@ -282,12 +282,14 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBZIP, \
     EXCLUDES := $(LIBZIP_EXCLUDES), \
     CFLAGS := $(CFLAGS_JDKLIB) \
         $(ZLIB_CPPFLAGS) \
+        $(LIBZ_CFLAGS) \
         -I$(JDK_TOPDIR)/src/share/native/java/io \
         -I$(JDK_TOPDIR)/src/$(OPENJDK_TARGET_OS_API_DIR)/native/java/io, \
     CFLAGS_posix := $(BUILD_LIBZIP_MMAP) -UDEBUG, \
     MAPFILE := $(JDK_TOPDIR)/make/mapfiles/libzip/mapfile-vers, \
     REORDER := $(BUILD_LIBZIP_REORDER), \
     LDFLAGS := $(LDFLAGS_JDKLIB) \
+        $(LIBZ_LIBS_MD) \
         $(call SET_SHARED_LIBRARY_ORIGIN) \
         $(EXPORT_ZIP_FUNCS), \
     LDFLAGS_windows := -export:ZIP_Open -export:ZIP_Close -export:ZIP_FindEntry \
@@ -440,9 +442,10 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBJLI, \
     INCLUDE_FILES := $(BUILD_LIBJLI_FILES), \
     LANG := C, \
     OPTIMIZATION := HIGH, \
-    CFLAGS := $(LIBJLI_CFLAGS), \
+    CFLAGS := $(LIBJLI_CFLAGS) $(LIBZ_CFLAGS), \
     MAPFILE := $(JDK_TOPDIR)/make/mapfiles/libjli/mapfile-vers, \
     LDFLAGS := $(LDFLAGS_JDKLIB) \
+        $(LIBZ_LIBS_MT) \
         $(call SET_SHARED_LIBRARY_ORIGIN), \
     LDFLAGS_linux := $(call SET_SHARED_LIBRARY_ORIGIN,/..), \
     LDFLAGS_solaris := $(call SET_SHARED_LIBRARY_ORIGIN,/..), \
@@ -487,7 +490,7 @@ ifeq ($(OPENJDK_TARGET_OS), windows)
       INCLUDE_FILES := $(BUILD_LIBJLI_FILES), \
       LANG := C, \
       OPTIMIZATION := HIGH, \
-      CFLAGS := $(STATIC_LIBRARY_FLAGS) $(LIBJLI_CFLAGS), \
+      CFLAGS := $(STATIC_LIBRARY_FLAGS) $(LIBJLI_CFLAGS) $(LIBZ_CFLAGS), \
       ARFLAGS := $(ARFLAGS), \
       OBJECT_DIR := $(JDK_OUTPUTDIR)/objs/libjli_static, \
       DEBUG_SYMBOLS := $(DEBUG_ALL_BINARIES)))
