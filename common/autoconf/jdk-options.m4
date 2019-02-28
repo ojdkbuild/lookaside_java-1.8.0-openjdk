@@ -411,10 +411,9 @@ AC_DEFUN_ONCE([JDKOPT_SETUP_JDK_OPTIONS],
   #
   AC_DEFUN_ONCE([JDKOPT_DETECT_INTREE_EC],
   [
-    AC_REQUIRE([LIB_SETUP_MISC_LIBS])
-    AC_MSG_CHECKING([if the elliptic curve crypto implementation is present])
+    AC_MSG_CHECKING([if elliptic curve crypto implementation is present])
 
-    if test "x${system_nss}" = "xyes" -o -d "${SRC_ROOT}/jdk/src/share/native/sun/security/ec/impl"; then
+    if test -d "${SRC_ROOT}/jdk/src/share/native/sun/security/ec/impl"; then
       ENABLE_INTREE_EC=yes
       AC_MSG_RESULT([yes])
     else

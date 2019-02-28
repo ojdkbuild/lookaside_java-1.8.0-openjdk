@@ -658,9 +658,6 @@ INSTALL_SHAREDSTATEDIR=@sharedstatedir@
 # Read-only single-machine data
 INSTALL_SYSCONFDIR=@sysconfdir@
 
-USE_EXTERNAL_NSS:=@USE_EXTERNAL_NSS@
-NSS_LIBS:=@NSS_LIBS@
-NSS_CFLAGS:=@NSS_CFLAGS@
 
 ####################################################
 #
