@@ -37,32 +37,21 @@ ifeq ($(OPENJDK_TARGET_OS), solaris)
 endif
 
 ifeq ($(OPENJDK_TARGET_OS), linux)
-  BUILD_LIBFDLIBM_OPTIMIZATION := HIGH
-  LIBFDLIBM_CFLAGS_LINUX := -ffp-contract=off
+  ifeq ($(OPENJDK_TARGET_CPU), ppc64)
+    BUILD_LIBFDLIBM_OPTIMIZATION := HIGH
+  else ifeq ($(OPENJDK_TARGET_CPU), ppc64le)
+    BUILD_LIBFDLIBM_OPTIMIZATION := HIGH
+  else ifeq ($(OPENJDK_TARGET_CPU), aarch64)
+    BUILD_LIBFDLIBM_OPTIMIZATION := HIGH
+  endif
+endif
+
+ifneq ($(OPENJDK_TARGET_OS), macosx)
   # Unfortunately, '-ffp-contract' is only available since gcc 4.6. For ppc64le
   # that's no problem since ppc64le support only appeared in gcc 4.8.3. But on
   # ppc64 (big endian) we traditionally compiled with gcc 4.3 which only knows
   # '-mno-fused-madd'. However, that's still not enough to get the float
   # computations right - we additionally have to supply '-fno-strict-aliasing'.
-  #
-  #
-  ifeq ($(TOOLCHAIN_TYPE), gcc)
-    CC_VER_MAJOR := $(shell $(CC) -dumpversion | cut -d'.' -f1)
-    CC_VER_MINOR := $(shell $(CC) -dumpversion | cut -d'.' -f2)
-  endif
-  # Only GCC 4.6 and better have machine independent -ffp-contract=off.
-  # For other versions we need to explicitly set arch specific machine
-  # flags or keep optimization off.
-  ifeq "$(shell expr \( $(CC_VER_MAJOR) \> 4 \) \| \( \( $(CC_VER_MAJOR) = 4 \) \& \( $(CC_VER_MINOR) \>= 6 \) \))" "0"
-    ifeq ($(OPENJDK_TARGET_CPU), ppc64)
-      LIBFDLIBM_CFLAGS_LINUX := -mno-fused-madd -fno-strict-aliasing
-    else
-      BUILD_LIBFDLIBM_OPTIMIZATION := NONE
-    endif
-  endif
-endif
-
-ifneq ($(OPENJDK_TARGET_OS), macosx)
   $(eval $(call SetupNativeCompilation,BUILD_LIBFDLIBM, \
       STATIC_LIBRARY := fdlibm, \
       OUTPUT_DIR := $(JDK_OUTPUTDIR)/objs, \
@@ -73,7 +62,9 @@ ifneq ($(OPENJDK_TARGET_OS), macosx)
           -I$(JDK_TOPDIR)/src/share/native/java/lang/fdlibm/include, \
       CFLAGS_windows_debug := -DLOGGING, \
       CFLAGS_aix := -qfloat=nomaf, \
-      CFLAGS_linux := $(LIBFDLIBM_CFLAGS_LINUX), \
+      CFLAGS_linux_ppc64 := -mno-fused-madd -fno-strict-aliasing, \
+      CFLAGS_linux_ppc64le := -ffp-contract=off, \
+      CFLAGS_linux_aarch64 := -ffp-contract=off, \
       ARFLAGS := $(ARFLAGS), \
       OBJECT_DIR := $(JDK_OUTPUTDIR)/objs/libfdlibm, \
       DEBUG_SYMBOLS := $(DEBUG_ALL_BINARIES)))
