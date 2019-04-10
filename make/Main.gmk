@@ -161,6 +161,12 @@ docs-only: start-make
 	@($(CD) $(SRC_ROOT)/make && $(BUILD_LOG_WRAPPER) $(MAKE) $(MAKE_ARGS) -f Javadoc.gmk docs)
 	@$(call TargetExit)
 
+zip-docs: docs zip-docs-only
+zip-docs-only: start-make
+	@$(call TargetEnter)
+	@($(CD) $(SRC_ROOT)/make && $(BUILD_LOG_WRAPPER) $(MAKE) $(MAKE_ARGS) -f Javadoc.gmk zip-docs)
+	@$(call TargetExit)
+
 sign-jars: jdk sign-jars-only
 sign-jars-only: start-make
 	@$(call TargetEnter)
