@@ -230,6 +230,16 @@ CFLAGS_WARN/BYFILE = $(CFLAGS_WARN/$@)$(CFLAGS_WARN/DEFAULT$(CFLAGS_WARN/$@))
 OPT_CFLAGS/SIZE=-Os
 OPT_CFLAGS/SPEED=-O3
 
+ifeq ($(USE_CLANG),)
+  # Only GCC 4.6 and better have machine independent -ffp-contract=off.
+  # For other versions we need to explicitly set arch specific machine
+  # flags or keep optimization off for them.
+  ifeq "$(shell expr \( $(CC_VER_MAJOR) \> 4 \) \| \( \( $(CC_VER_MAJOR) = 4 \) \& \( $(CC_VER_MINOR) \>= 6 \) \))" "1"
+    OPT_CFLAGS_NO_FMA = -ffp-contract=off
+  endif
+endif
+
+
 # Hotspot uses very unstrict aliasing turn this optimization off
 # This option is added to CFLAGS rather than OPT_CFLAGS
 # so that OPT_CFLAGS overrides get this option too.

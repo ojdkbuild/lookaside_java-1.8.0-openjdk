@@ -49,3 +49,17 @@ else
   # Use Power8, this is the first CPU to support PPC64 LE with ELFv2 ABI.
   CFLAGS += -mcpu=power7 -mtune=power8 -minsert-sched-nops=regroup_exact -mno-multiple -mno-string
 endif
+
+ifeq ($(OPT_CFLAGS_NO_FMA),)
+  ifeq ($(OPENJDK_TARGET_CPU_ENDIAN),big)
+    OPT_CFLAGS/sharedRuntimeTrig.o = $(OPT_CFLAGS/SPEED) -mno-fused-madd -fno-strict-aliasing
+    OPT_CFLAGS/sharedRuntimeTrans.o = $(OPT_CFLAGS/SPEED) -mno-fused-madd -fno-strict-aliasing
+  else
+    OPT_CFLAGS/sharedRuntimeTrig.o = $(OPT_CFLAGS/NOOPT)
+    OPT_CFLAGS/sharedRuntimeTrans.o = $(OPT_CFLAGS/NOOPT)
+  endif
+else
+  OPT_CFLAGS/sharedRuntimeTrig.o = $(OPT_CFLAGS/SPEED) $(OPT_CFLAGS_NO_FMA)
+  OPT_CFLAGS/sharedRuntimeTrans.o = $(OPT_CFLAGS/SPEED) $(OPT_CFLAGS_NO_FMA)
+endif
+
