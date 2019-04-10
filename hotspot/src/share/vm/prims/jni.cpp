@@ -710,6 +710,7 @@ JNI_ENTRY(jint, jni_Throw(JNIEnv *env, jthrowable obj))
 
   THROW_OOP_(JNIHandles::resolve(obj), JNI_OK);
   ShouldNotReachHere();
+  return 0;  // Mute compiler.
 JNI_END
 
 #ifndef USDT2
@@ -736,6 +737,7 @@ JNI_ENTRY(jint, jni_ThrowNew(JNIEnv *env, jclass clazz, const char *message))
   Handle protection_domain (THREAD, k->protection_domain());
   THROW_MSG_LOADER_(name, (char *)message, class_loader, protection_domain, JNI_OK);
   ShouldNotReachHere();
+  return 0;  // Mute compiler.
 JNI_END
 
 
