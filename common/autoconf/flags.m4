@@ -111,7 +111,7 @@ AC_DEFUN_ONCE([FLAGS_SETUP_INIT_FLAGS],
         -d \"JDK_VER=\$(JDK_MINOR_VERSION).\$(JDK_MICRO_VERSION).\$(COOKED_JDK_UPDATE_VERSION).\$(COOKED_BUILD_NUMBER)\" \
         -d \"JDK_COPYRIGHT=Copyright \xA9 $COPYRIGHT_YEAR\" \
         -d \"JDK_NAME=\$(PRODUCT_NAME) \$(JDK_RC_PLATFORM_NAME) \$(JDK_MINOR_VERSION) \$(JDK_UPDATE_META_TAG)\" \
-        -d \"JDK_FVER=\$(JDK_MINOR_VERSION),\$(JDK_MICRO_VERSION),\$(if \$(JDK_UPDATE_VERSION),\$(JDK_UPDATE_VERSION),0),\$(COOKED_BUILD_NUMBER)\""
+        -d \"JDK_FVER=\$(JDK_MINOR_VERSION),\$(JDK_MICRO_VERSION),\$(if \$(COOKED_JDK_UPDATE_VERSION),\$(COOKED_JDK_UPDATE_VERSION),0),\$(COOKED_BUILD_NUMBER)\""
   fi
   AC_SUBST(RC_FLAGS)
 
@@ -278,6 +278,11 @@ AC_DEFUN_ONCE([FLAGS_SETUP_COMPILER_FLAGS_FOR_OPTIMIZATION],
   AC_SUBST(CXX_FLAG_DEPS)
 
   # Debug symbols
+  #
+  # By default don't set any specific assembler debug
+  # info flags for toolchains unless we know they work.
+  # See JDK-8207057.
+  ASFLAGS_DEBUG_SYMBOLS=""
   if test "x$TOOLCHAIN_TYPE" = xgcc; then
     if test "x$OPENJDK_TARGET_CPU_BITS" = "x64" && test "x$DEBUG_LEVEL" = "xfastdebug"; then
       CFLAGS_DEBUG_SYMBOLS="-g1"
@@ -286,6 +291,7 @@ AC_DEFUN_ONCE([FLAGS_SETUP_COMPILER_FLAGS_FOR_OPTIMIZATION],
       CFLAGS_DEBUG_SYMBOLS="-g"
       CXXFLAGS_DEBUG_SYMBOLS="-g"
     fi
+    ASFLAGS_DEBUG_SYMBOLS="-g"
   elif test "x$TOOLCHAIN_TYPE" = xsolstudio; then
     CFLAGS_DEBUG_SYMBOLS="-g -xs"
     CXXFLAGS_DEBUG_SYMBOLS="-g0 -xs"
@@ -293,6 +299,7 @@ AC_DEFUN_ONCE([FLAGS_SETUP_COMPILER_FLAGS_FOR_OPTIMIZATION],
     CFLAGS_DEBUG_SYMBOLS="-g"
     CXXFLAGS_DEBUG_SYMBOLS="-g"
   fi
+  AC_SUBST(ASFLAGS_DEBUG_SYMBOLS)
   AC_SUBST(CFLAGS_DEBUG_SYMBOLS)
   AC_SUBST(CXXFLAGS_DEBUG_SYMBOLS)
 
@@ -381,6 +388,20 @@ AC_DEFUN_ONCE([FLAGS_SETUP_COMPILER_FLAGS_FOR_JDK],
     CFLAGS_JDK="${CFLAGS_JDK} -qchars=signed -q64 -qfullpath -qsaveopt"
     CXXFLAGS_JDK="${CXXFLAGS_JDK} -qchars=signed -q64 -qfullpath -qsaveopt"
   elif test "x$TOOLCHAIN_TYPE" = xgcc; then
+    case $OPENJDK_TARGET_CPU_ARCH in
+    x86 )
+      LEGACY_EXTRA_CFLAGS="$LEGACY_EXTRA_CFLAGS -fstack-protector"
+      LEGACY_EXTRA_CXXFLAGS="$LEGACY_EXTRA_CXXFLAGS -fstack-protector"
+      ;;
+    x86_64 )
+      LEGACY_EXTRA_CFLAGS="$LEGACY_EXTRA_CFLAGS -fstack-protector"
+      LEGACY_EXTRA_CXXFLAGS="$LEGACY_EXTRA_CXXFLAGS -fstack-protector"
+      ;;
+    esac
+    if test "x$OPENJDK_TARGET_OS" != xmacosx; then
+      LDFLAGS_JDK="$LDFLAGS_JDK -Wl,-z,relro"
+      LEGACY_EXTRA_LDFLAGS="$LEGACY_EXTRA_LDFLAGS -Wl,-z,relro"
+    fi
     $2CXXSTD_CXXFLAG="-std=gnu++98"
     FLAGS_CXX_COMPILER_CHECK_ARGUMENTS([[$]$2CXXSTD_CXXFLAG -Werror],
                                        [], [$2CXXSTD_CXXFLAG=""])
@@ -442,6 +463,10 @@ AC_DEFUN_ONCE([FLAGS_SETUP_COMPILER_FLAGS_FOR_JDK],
         ;;
       ppc )
         # on ppc we don't prevent gcc to omit frame pointer nor strict-aliasing
+        ;;
+      x86 )
+        CCXXFLAGS_JDK="$CCXXFLAGS_JDK -fno-omit-frame-pointer -fstack-protector"
+        CFLAGS_JDK="${CFLAGS_JDK} -fno-strict-aliasing -fstack-protector"
         ;;
       * )
         CCXXFLAGS_JDK="$CCXXFLAGS_JDK -fno-omit-frame-pointer"
@@ -531,6 +556,9 @@ AC_DEFUN_ONCE([FLAGS_SETUP_COMPILER_FLAGS_FOR_JDK],
     else
       CCXXFLAGS_JDK="$CCXXFLAGS_JDK -D_BIG_ENDIAN"
     fi
+  fi
+  if test "x$OPENJDK_TARGET_CPU" = xppc64le; then
+    CCXXFLAGS_JDK="$CCXXFLAGS_JDK -DABI_ELFv2"
   fi
   
   # Setup target OS define. Use OS target name but in upper case.
