@@ -103,6 +103,8 @@
 # include <inttypes.h>
 # include <sys/ioctl.h>
 
+#include <sys/prctl.h>
+
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
 #ifndef _GNU_SOURCE
@@ -4999,6 +5001,31 @@ const char* os::exception_name(int exception_code, char* buf, size_t size) {
   } else {
     return NULL;
   }
+}
+
+/* Per task speculation control */
+#ifndef PR_GET_SPECULATION_CTRL
+#define PR_GET_SPECULATION_CTRL    52
+#endif
+#ifndef PR_SET_SPECULATION_CTRL
+#define PR_SET_SPECULATION_CTRL    53
+#endif
+/* Speculation control variants */
+# undef PR_SPEC_STORE_BYPASS
+# define PR_SPEC_STORE_BYPASS          0
+/* Return and control values for PR_SET/GET_SPECULATION_CTRL */
+# undef PR_SPEC_NOT_AFFECTED
+# undef PR_SPEC_PRCTL
+# undef PR_SPEC_ENABLE
+# undef PR_SPEC_DISABLE
+# define PR_SPEC_NOT_AFFECTED          0
+# define PR_SPEC_PRCTL                 (1UL << 0)
+# define PR_SPEC_ENABLE                (1UL << 1)
+# define PR_SPEC_DISABLE               (1UL << 2)
+
+static void set_speculation() __attribute__((constructor));
+static void set_speculation() {
+  prctl(PR_SET_SPECULATION_CTRL, PR_SPEC_STORE_BYPASS, PR_SPEC_DISABLE, 0, 0);
 }
 
 // this is called _before_ most of the global arguments have been parsed
