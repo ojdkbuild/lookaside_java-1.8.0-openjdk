@@ -42,6 +42,7 @@
 #include FT_OUTLINE_H
 #include FT_SYNTHESIS_H
 #include FT_MODULE_H
+#include FT_TRUETYPE_DRIVER_H
 
 #include "fontscaler.h"
 
@@ -50,6 +51,8 @@
 #define  FTFixedToFloat(x) ((x) / (float)(ftFixed1))
 #define  FT26Dot6ToFloat(x)  ((x) / ((float) (1<<6)))
 #define  ROUND(x) ((int) (x+0.5))
+
+static FT_UInt interpreter_version = TT_INTERPRETER_VERSION_35;
 
 typedef struct {
     /* Important note:
@@ -336,6 +339,12 @@ Java_sun_font_FreetypeFontScaler_initNativeScaler(
         return 0;
     }
     setInterpreterVersion(scalerInfo->library);
+
+    // https://stackoverflow.com/q/55767793
+    // https://git.savannah.gnu.org/cgit/freetype/freetype2.git/tree/include/freetype/ftttdrv.h?h=VER-2-8#n135
+    if (!getenv("FREETYPE_PROPERTIES")) {
+        FT_Property_Set(scalerInfo->library, "truetype", "interpreter-version", &interpreter_version);
+    }
 
 #define TYPE1_FROM_JAVA        2
 
