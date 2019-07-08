@@ -883,7 +883,11 @@ public abstract class Toolkit {
                     return null;
                 }
             });
-            loadAssistiveTechnologies();
+         try {
+                 loadAssistiveTechnologies();
+             } catch ( AWTError error) {
+                 // ignore silently
+             }
         }
         return toolkit;
     }
