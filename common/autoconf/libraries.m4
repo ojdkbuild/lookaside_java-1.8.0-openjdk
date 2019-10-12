@@ -775,41 +775,11 @@ AC_DEFUN_ONCE([LIB_SETUP_MISC_LIBS],
   #
 
   USE_EXTERNAL_LIBJPEG=true
-  AC_ARG_WITH(libjpeg, [AS_HELP_STRING([--with-libjpeg],
-      [use libjpeg from build system or OpenJDK sources (system, bundled) @<:@bundled@:>@])])
-
-  AC_CHECK_LIB(jpeg, jpeg_destroy_compress,
-               [ LIBJPEG_FOUND=yes ],
-               [ LIBJPEG_FOUND=no ])
-
-  AC_MSG_CHECKING([for which libjpeg to use])
-
-  # default is bundled
-  DEFAULT_LIBJPEG=bundled
-
-  #
-  # if user didn't specify, use DEFAULT_LIBJPEG
-  #
-  if test "x${with_libjpeg}" = "x"; then
-      with_libjpeg=${DEFAULT_LIBJPEG}
-  fi
-
-  if test "x${with_libjpeg}" = "xbundled"; then
-      USE_EXTERNAL_LIBJPEG=false
-      AC_MSG_RESULT([bundled])
-  elif test "x${with_libjpeg}" = "xsystem"; then
-      if test "x${LIBJPEG_FOUND}" = "xyes"; then
-          USE_EXTERNAL_LIBJPEG=true
-          AC_MSG_RESULT([system])
-      else
-          AC_MSG_RESULT([system not found])
-          AC_MSG_ERROR([--with-libjpeg=system specified, but no libjpeg found])
-      fi
-  else
-      AC_MSG_ERROR([Invalid use of --with-libjpeg: ${with_libjpeg}, use 'system' or 'bundled'])
-  fi
+  AC_CHECK_LIB(jpeg, main, [],
+      [ USE_EXTERNAL_LIBJPEG=false
+      AC_MSG_NOTICE([Will use jpeg decoder bundled with the OpenJDK source])
+  ])
   AC_SUBST(USE_EXTERNAL_LIBJPEG)
-
 
   ###############################################################################
   #
