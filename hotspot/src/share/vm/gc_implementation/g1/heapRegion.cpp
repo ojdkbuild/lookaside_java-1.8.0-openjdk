@@ -109,7 +109,7 @@ void HeapRegion::setup_heap_region_size(size_t initial_heap_size, size_t max_hea
   if (FLAG_IS_DEFAULT(G1HeapRegionSize)) {
     size_t average_heap_size = (initial_heap_size + max_heap_size) / 2;
     region_size = MAX2(average_heap_size / HeapRegionBounds::target_number(),
-                       (uintx) HeapRegionBounds::min_size());
+                       HeapRegionBounds::min_size());
   }
 
   int region_size_log = log2_long((jlong) region_size);
