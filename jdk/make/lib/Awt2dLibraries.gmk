@@ -734,10 +734,9 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBJPEG, \
     OPTIMIZATION := HIGHEST, \
     CFLAGS := $(CFLAGS_JDKLIB) \
         $(BUILD_LIBJPEG_CLOSED_INCLUDES) \
-        $(LIBJPEG_CFLAGS), \
+        -I$(JDK_TOPDIR)/src/share/native/sun/awt/image/jpeg, \
     MAPFILE := $(BUILD_LIBJPEG_MAPFILE), \
     LDFLAGS := $(LDFLAGS_JDKLIB) \
-        $(LIBJPEG_LIBS) \
         $(call SET_SHARED_LIBRARY_ORIGIN), \
     LDFLAGS_windows := $(WIN_JAVA_LIB) jvm.lib, \
     LDFLAGS_SUFFIX := $(LDFLAGS_JDKLIB_SUFFIX), \
@@ -1138,10 +1137,12 @@ endif
 
 ifndef BUILD_HEADLESS_ONLY
   LIBSPLASHSCREEN_DIRS := \
+    $(JDK_TOPDIR)/src/share/native/sun/awt/image/jpeg \
+    $(JDK_TOPDIR)/src/share/native/sun/awt/libpng \
     $(JDK_TOPDIR)/src/share/native/sun/awt/splashscreen
 
   ifeq ($(USE_EXTERNAL_LIBGIF), true)
-    GIFLIB_LDFLAGS := $(GIFLIB_LIBS)
+    GIFLIB_LDFLAGS := -lgif
   else
     LIBSPLASHSCREEN_DIRS += $(JDK_TOPDIR)/src/share/native/sun/awt/giflib
     GIFLIB_CFLAGS := -I$(JDK_TOPDIR)/src/share/native/sun/awt/giflib
@@ -1203,11 +1204,11 @@ ifndef BUILD_HEADLESS_ONLY
       EXCLUDE_FILES := imageioJPEG.c jpegdecoder.c pngtest.c, \
       LANG := C, \
       OPTIMIZATION := LOW, \
-      CFLAGS := $(LIBSPLASHSCREEN_CFLAGS) $(CFLAGS_JDKLIB) $(LIBJPEG_CFLAGS) $(GIFLIB_CFLAGS) $(PNG_CFLAGS), \
+      CFLAGS := $(LIBSPLASHSCREEN_CFLAGS) $(CFLAGS_JDKLIB) $(GIFLIB_CFLAGS), \
       MAPFILE := $(JDK_TOPDIR)/make/mapfiles/libsplashscreen/mapfile-vers, \
       LDFLAGS := $(LDFLAGS_JDKLIB) \
           $(call SET_SHARED_LIBRARY_ORIGIN), \
-      LDFLAGS_SUFFIX := $(LIBSPLASHSCREEN_LDFLAGS_SUFFIX) $(LIBZ_LIBS_MD) $(LIBJPEG_LIBS) $(GIFLIB_LDFLAGS) $(PNG_LIBS), \
+      LDFLAGS_SUFFIX := $(LIBSPLASHSCREEN_LDFLAGS_SUFFIX) $(LIBZ) $(GIFLIB_LDFLAGS), \
       LDFLAGS_SUFFIX_solaris := -lc, \
       VERSIONINFO_RESOURCE := $(JDK_TOPDIR)/src/windows/resource/version.rc, \
       RC_FLAGS := $(RC_FLAGS) \
