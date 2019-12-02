@@ -109,7 +109,7 @@ define SetupLauncher
   endif
 
   ifeq ($(USE_EXTERNAL_LIBZ), true)
-    $1_LDFLAGS_SUFFIX += -lz
+    #$1_LDFLAGS_SUFFIX += -lz
   endif
 
   $1_OUTPUT_DIR_ARG := $9
@@ -128,6 +128,9 @@ define SetupLauncher
   $1_CFLAGS := $(CFLAGS_JDKEXE)
   ifeq ($(10), true)
     $1_CFLAGS := $(filter-out -MD, $(CFLAGS_JDKEXE))
+    $1_LDFLAGS_SUFFIX += $(LIBZ_LIBS_MT)
+  else
+    $1_LDFLAGS_SUFFIX += $(LIBZ_LIBS_MD)
   endif
 
   # The linker on older SuSE distros (e.g. on SLES 10) complains with:
@@ -436,8 +439,8 @@ endif
 # The order of the object files on the link command line affects the size of the resulting
 # binary (at least on linux) which causes the size to differ between old and new build.
 ifeq ($(USE_EXTERNAL_LIBZ), true)
-  UNPACKEXE_CFLAGS := -DSYSTEM_ZLIB
-  UNPACKEXE_ZIPOBJS := -lz
+  UNPACKEXE_CFLAGS := $(LIBZ_CFLAGS)
+  #UNPACKEXE_ZIPOBJS := -lz
 else
   UNPACKEXE_CFLAGS := -I$(JDK_TOPDIR)/src/share/native/java/util/zip/zlib
   UNPACKEXE_ZIPOBJS := $(JDK_OUTPUTDIR)/objs/libzip/zcrc32$(OBJ_SUFFIX) \
@@ -495,7 +498,7 @@ $(eval $(call SetupNativeCompilation,BUILD_UNPACKEXE, \
         $(call SET_SHARED_LIBRARY_ORIGIN), \
     LDFLAGS_linux := -lc, \
     LDFLAGS_solaris := $(UNPACKEXE_LDFLAGS_solaris) -lc, \
-    LDFLAGS_SUFFIX := $(LIBCXX), \
+    LDFLAGS_SUFFIX := $(LIBCXX) /link $(LIBZ_LIBS_MD), \
     OBJECT_DIR := $(JDK_OUTPUTDIR)/objs/unpackexe$(OUTPUT_SUBDIR), \
     OUTPUT_DIR := $(JDK_OUTPUTDIR)/objs/unpackexe$(OUTPUT_SUBDIR), \
     PROGRAM := unpack200, \

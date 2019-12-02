@@ -257,6 +257,7 @@ $(eval $(call SetupNativeCompilation,BUILD_LIBINSTRUMENT, \
     CFLAGS_release := -DNO_JPLIS_LOGGING, \
     MAPFILE := $(JDK_TOPDIR)/make/mapfiles/libinstrument/mapfile-vers, \
     LDFLAGS := $(LDFLAGS_JDKLIB) \
+        $(LIBZ_LIBS_MT) \
         $(call SET_SHARED_LIBRARY_ORIGIN) \
         $(LIBINSTRUMENT_LDFLAGS), \
     LDFLAGS_linux := $(call SET_SHARED_LIBRARY_ORIGIN,/jli), \
