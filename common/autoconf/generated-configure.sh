@@ -655,9 +655,20 @@ LIBDL
 LIBM
 LIBZIP_CAN_USE_MMAP
 USE_EXTERNAL_LIBZ
+LIBZ_CFLAGS
+LIBZ_LIBS_MD
+LIBZ_LIBS_MT
+FREETYPE_SHARED_LIB_PATH
 USE_EXTERNAL_LIBGIF
+GIFLIB_CFLAGS
+GIFLIB_LIBS
 USE_EXTERNAL_LIBJPEG
 FONTCONFIG_CFLAGS
+LIBJPEG_CFLAGS
+LIBJPEG_LIBS
+USE_EXTERNAL_LIBPNG
+PNG_CFLAGS
+PNG_LIBS
 ALSA_LIBS
 ALSA_CFLAGS
 FREETYPE_BUNDLE_LIB_PATH
@@ -48139,6 +48150,46 @@ done
   # Check for the jpeg library
   #
 
+  # ojdkbuild libjpeg-turbo
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for which libjpeg to use" >&5
+$as_echo_n "checking for which libjpeg to use... " >&6; }
+  USE_EXTERNAL_LIBJPEG=true
+  LIBJPEG_CFLAGS=`pkg-config libjpeg-turbo --cflags --msvc-syntax`
+  LIBJPEG_LIBS=`pkg-config libjpeg-turbo --libs --msvc-syntax`
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: ojdkbuild" >&5
+$as_echo "ojdkbuild" >&6; }
+
+  # ojdkbuild giflib
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for which giflib to use" >&5
+$as_echo_n "checking for which giflib to use... " >&6; }
+  USE_EXTERNAL_LIBGIF=true
+  GIFLIB_CFLAGS=`pkg-config giflib --cflags --msvc-syntax`
+  GIFLIB_LIBS=`pkg-config giflib --libs --msvc-syntax`
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: ojdkbuild" >&5
+$as_echo "ojdkbuild" >&6; }
+
+  # ojdkbuild libpng
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for which libpng to use" >&5
+$as_echo_n "checking for which libpng to use... " >&6; }
+  USE_EXTERNAL_LIBPNG=true
+  PNG_CFLAGS=`pkg-config libpng --cflags --msvc-syntax`
+  PNG_LIBS=`pkg-config libpng --libs --msvc-syntax`
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: ojdkbuild" >&5
+$as_echo "ojdkbuild" >&6; }
+
+  # ojdkbuild_zlib
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for which zlib to use" >&5
+$as_echo_n "checking for which zlib to use... " >&6; }
+  USE_EXTERNAL_LIBZ=true
+  LIBZ_CFLAGS=`pkg-config zlib --cflags --msvc-syntax`
+  LIBZ_LIBS_MD=`pkg-config zlib_altcr --libs --msvc-syntax`
+  LIBZ_LIBS_MT=`pkg-config zlib --libs --msvc-syntax`
+  FREETYPE_SHARED_LIB_PATH=`pkg-config freetype --variable=shared_lib_path`
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: ojdkbuild" >&5
+$as_echo "ojdkbuild" >&6; }
+
+  if (test "ojdkbuild_skip" != "ojdkbuild_skip" ); then
+
   USE_EXTERNAL_LIBJPEG=true
   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -ljpeg" >&5
 $as_echo_n "checking for main in -ljpeg... " >&6; }
@@ -48379,6 +48430,7 @@ $as_echo "system not found" >&6; }
   fi
 
 
+  fi # ojdkbuild_skip
 
   ###############################################################################
   LIBZIP_CAN_USE_MMAP=true
