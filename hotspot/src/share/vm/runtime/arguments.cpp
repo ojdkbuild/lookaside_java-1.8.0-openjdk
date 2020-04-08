@@ -1295,14 +1295,14 @@ void Arguments::set_cms_and_parnew_gc_flags() {
     }
     if (PrintGCDetails && Verbose) {
       // Too early to use gclog_or_tty
-      tty->print_cr("CMS ergo set MaxNewSize: " SIZE_FORMAT, MaxNewSize);
+      tty->print_cr("CMS ergo set MaxNewSize: " UINTX_FORMAT, MaxNewSize);
     }
 
     // Code along this path potentially sets NewSize and OldSize
     if (PrintGCDetails && Verbose) {
       // Too early to use gclog_or_tty
-      tty->print_cr("CMS set min_heap_size: " SIZE_FORMAT
-           " initial_heap_size:  " SIZE_FORMAT
+      tty->print_cr("CMS set min_heap_size: " UINTX_FORMAT
+           " initial_heap_size:  " UINTX_FORMAT
            " max_heap: " SIZE_FORMAT,
            min_heap_size(), InitialHeapSize, max_heap);
     }
@@ -1318,7 +1318,7 @@ void Arguments::set_cms_and_parnew_gc_flags() {
         FLAG_SET_ERGO(uintx, NewSize, MIN2(preferred_max_new_size, (size_t)NewSize));
         if (PrintGCDetails && Verbose) {
           // Too early to use gclog_or_tty
-          tty->print_cr("CMS ergo set NewSize: " SIZE_FORMAT, NewSize);
+          tty->print_cr("CMS ergo set NewSize: " UINTX_FORMAT, NewSize);
         }
       }
       // Unless explicitly requested otherwise, size old gen
@@ -1328,7 +1328,7 @@ void Arguments::set_cms_and_parnew_gc_flags() {
           FLAG_SET_ERGO(uintx, OldSize, MIN2((size_t)(NewRatio*NewSize), max_heap - NewSize));
           if (PrintGCDetails && Verbose) {
             // Too early to use gclog_or_tty
-            tty->print_cr("CMS ergo set OldSize: " SIZE_FORMAT, OldSize);
+            tty->print_cr("CMS ergo set OldSize: " UINTX_FORMAT, OldSize);
           }
         }
       }
@@ -2080,7 +2080,7 @@ void Arguments::set_heap_size() {
 
       if (PrintGCDetails && Verbose) {
         // Cannot use gclog_or_tty yet.
-        tty->print_cr("  Initial heap size " SIZE_FORMAT, (uintx)reasonable_initial);
+        tty->print_cr("  Initial heap size " SIZE_FORMAT, (size_t)reasonable_initial);
       }
       FLAG_SET_ERGO(uintx, InitialHeapSize, (uintx)reasonable_initial);
     }
@@ -2090,7 +2090,7 @@ void Arguments::set_heap_size() {
       set_min_heap_size(MIN2((uintx)reasonable_minimum, InitialHeapSize));
       if (PrintGCDetails && Verbose) {
         // Cannot use gclog_or_tty yet.
-        tty->print_cr("  Minimum heap size " SIZE_FORMAT, min_heap_size());
+        tty->print_cr("  Minimum heap size " UINTX_FORMAT, min_heap_size());
       }
     }
   }
