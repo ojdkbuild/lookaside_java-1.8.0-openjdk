@@ -77,6 +77,17 @@ static const ECCurveParams ecCurve_NIST_P521 = {
         1
 };
 
+/* SEC2 prime curves */
+static const ECCurveParams ecCurve_SECG_PRIME_256K1 = {
+        "SECP-256K1", ECField_GFp, 256,
+        "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "0000000000000000000000000000000000000000000000000000000000000007",
+        "79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798",
+        "483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8",
+        "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 1
+};
+
 /* mapping between ECCurveName enum and pointers to ECCurveParams */
 static const ECCurveParams *ecCurve_map[] = {
     NULL,                               /* ECCurve_noName */
@@ -122,6 +133,10 @@ static const ECCurveParams *ecCurve_map[] = {
     NULL,                               /* ECCurve_noName */
     NULL,                               /* ECCurve_noName */
     NULL,                               /* ECCurve_noName */
+    NULL,                               /* ECCurve_noName */
+    NULL,                               /* ECCurve_noName */
+    NULL,                               /* ECCurve_noName */
+    &ecCurve_SECG_PRIME_256K1,          /* ECCurve_SECG_PRIME_256K1 */
     NULL,                               /* ECCurve_noName */
     NULL,                               /* ECCurve_noName */
     NULL,                               /* ECCurve_noName */

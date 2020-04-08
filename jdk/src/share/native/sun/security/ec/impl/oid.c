@@ -72,6 +72,7 @@
 CONST_OID ansiX962prime256v1[] = { ANSI_X962_GFp_OID, 0x07 };
 
 /* SECG prime curve OIDs */
+CONST_OID secgECsecp256k1[] = { SECG_OID, 0x0a };
 CONST_OID secgECsecp384r1[] = { SECG_OID, 0x22 };
 CONST_OID secgECsecp521r1[] = { SECG_OID, 0x23 };
 
@@ -135,8 +136,10 @@ static SECOidData SECG_oids[] = {
         "Unknown OID", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION },
     { { siDEROID, NULL, 0 }, ECCurve_noName,
         "Unknown OID", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION },
-    { { siDEROID, NULL, 0 }, ECCurve_noName,
-        "Unknown OID", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION },
+    OD( secgECsecp256k1, ECCurve_SECG_PRIME_256K1,
+        "SECG elliptic curve secp256k1",
+        CKM_INVALID_MECHANISM,
+        INVALID_CERT_EXTENSION ),
     { { siDEROID, NULL, 0 }, ECCurve_noName,
         "Unknown OID", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION },
     { { siDEROID, NULL, 0 }, ECCurve_noName,

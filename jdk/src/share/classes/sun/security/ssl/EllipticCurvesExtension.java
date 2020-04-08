@@ -65,6 +65,7 @@ final class EllipticCurvesExtension extends HelloExtension {
 
     // See sun.security.util.CurveDB for the OIDs
     private static enum NamedEllipticCurve {
+        P256_K1(22, "secp256k1",    "1.3.132.0.10",     false),
         P256_R1(23, "secp256r1",    "1.2.840.10045.3.1.7", true), // NIST P-256
         P384_R1(24, "secp384r1",    "1.3.132.0.34",     true),  // NIST P-384
         P521_R1(25, "secp521r1",    "1.3.132.0.35",     true);  // NIST P-521

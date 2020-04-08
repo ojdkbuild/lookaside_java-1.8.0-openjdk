@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006, 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2006, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -31,6 +31,8 @@ import java.security.spec.*;
 
 import java.util.*;
 import java.util.regex.Pattern;
+
+import sun.security.util.ECUtil;
 
 /**
  * Repository for well-known Elliptic Curve parameters. It is used by both
@@ -104,21 +106,10 @@ public class CurveDB {
             if (namedCurve.getCurve().getField().getFieldSize() != fieldSize) {
                 continue;
             }
-            if (namedCurve.getCurve().equals(params.getCurve()) == false) {
-                continue;
+            if (ECUtil.equals(namedCurve, params)) {
+                // everything matches our named curve, return it
+                return namedCurve;
             }
-            if (namedCurve.getGenerator().equals(params.getGenerator()) ==
-                    false) {
-                continue;
-            }
-            if (namedCurve.getOrder().equals(params.getOrder()) == false) {
-                continue;
-            }
-            if (namedCurve.getCofactor() != params.getCofactor()) {
-                continue;
-            }
-            // everything matches our named curve, return it
-            return namedCurve;
         }
         // no match found
         return null;
@@ -168,6 +159,15 @@ public class CurveDB {
         Pattern nameSplitPattern = Pattern.compile(SPLIT_PATTERN);
 
         /* SEC2 prime curves */
+        add("secp256k1", "1.3.132.0.10", P,
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F",
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "0000000000000000000000000000000000000000000000000000000000000007",
+            "79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798",
+            "483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8",
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141",
+            1, nameSplitPattern);
+
         add("secp256r1 [NIST P-256, X9.62 prime256v1]", "1.2.840.10045.3.1.7", PD,
             "FFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF",
             "FFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFC",
