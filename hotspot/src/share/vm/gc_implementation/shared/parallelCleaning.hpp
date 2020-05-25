@@ -75,8 +75,8 @@ public:
 
     if (G1TraceStringSymbolTableScrubbing) {
       gclog_or_tty->print_cr("Cleaned string and symbol table, "
-                             "strings: "SIZE_FORMAT" processed, "SIZE_FORMAT" removed, "
-                             "symbols: "SIZE_FORMAT" processed, "SIZE_FORMAT" removed",
+                             "strings: " SIZE_FORMAT " processed, " SIZE_FORMAT " removed, "
+                             "symbols: " SIZE_FORMAT " processed, " SIZE_FORMAT " removed",
                              strings_processed(), strings_removed(),
                              symbols_processed(), symbols_removed());
     }
