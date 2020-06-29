@@ -534,7 +534,7 @@ class CommandLineFlags {
   lp64_product(intx, ObjectAlignmentInBytes, 8,                             \
           "Default object alignment in bytes, 8 is minimum")                \
                                                                             \
-  product(bool, AssumeMP, true,                                             \
+  product(bool, AssumeMP, false,                                            \
           "Instruct the VM to assume multiple processors are available")    \
                                                                             \
   /* UseMembar is theoretically a temp flag used for memory barrier         \
