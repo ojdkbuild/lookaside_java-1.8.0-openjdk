@@ -1662,14 +1662,11 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
   }
 
   // Change state to native (we save the return address in the thread, since it might not
-  // be pushed on the stack when we do a a stack traversal). It is enough that the pc()
-  // points into the right code segment. It does not have to be the correct return pc.
+  // be pushed on the stack when we do a stack traversal).
   // We use the same pc/oopMap repeatedly when we call out
 
-  intptr_t the_pc = (intptr_t) __ pc();
-  oop_maps->add_gc_map(the_pc - start, map);
-
-  __ set_last_Java_frame(sp, noreg, (address)the_pc, rscratch1);
+  Label native_return;
+  __ set_last_Java_frame(sp, noreg, native_return, rscratch1);
 
   Label dtrace_method_entry, dtrace_method_entry_done;
   {
@@ -1795,10 +1792,15 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
       ShouldNotReachHere();
     }
     rt_call(masm, native_func,
-	    int_args + 2, // AArch64 passes up to 8 args in int registers
-	    float_args,   // and up to 8 float args
-	    return_type);
+            int_args + 2, // AArch64 passes up to 8 args in int registers
+            float_args,   // and up to 8 float args
+            return_type);
   }
+
+  __ bind(native_return);
+
+  intptr_t return_pc = (intptr_t) __ pc();
+  oop_maps->add_gc_map(return_pc - start, map);
 
   // Unpack native results.
   switch (ret_type) {
@@ -1944,7 +1946,7 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
     __ ldr(r0, Address(r0, -JNIHandles::weak_tag_value));
     __ verify_oop(r0);
 #if INCLUDE_ALL_GCS
-    if (UseG1GC || (UseShenandoahGC && ShenandoahKeepAliveBarrier)) {
+    if (UseG1GC || (UseShenandoahGC && ShenandoahSATBBarrier)) {
       __ g1_write_barrier_pre(noreg /* obj */,
                               r0 /* pre_val */,
                               rthread /* thread */,

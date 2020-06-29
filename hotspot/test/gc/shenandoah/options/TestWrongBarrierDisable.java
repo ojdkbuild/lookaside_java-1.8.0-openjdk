@@ -37,14 +37,13 @@ public class TestWrongBarrierDisable {
     public static void main(String[] args) throws Exception {
         String[] concurrent = {
                 "ShenandoahLoadRefBarrier",
+                "ShenandoahSATBBarrier",
                 "ShenandoahCASBarrier",
                 "ShenandoahCloneBarrier",
-                "ShenandoahSATBBarrier",
-                "ShenandoahKeepAliveBarrier",
         };
-
-        String[] traversal = {
+        String[] iu = {
                 "ShenandoahLoadRefBarrier",
+                "ShenandoahStoreValEnqueueBarrier",
                 "ShenandoahCASBarrier",
                 "ShenandoahCloneBarrier",
         };
@@ -53,9 +52,9 @@ public class TestWrongBarrierDisable {
         shouldFailAll("-XX:ShenandoahGCHeuristics=static",     concurrent);
         shouldFailAll("-XX:ShenandoahGCHeuristics=compact",    concurrent);
         shouldFailAll("-XX:ShenandoahGCHeuristics=aggressive", concurrent);
-        shouldFailAll("-XX:ShenandoahGCMode=traversal",        traversal);
+        shouldFailAll("-XX:ShenandoahGCMode=iu",               iu);
         shouldPassAll("-XX:ShenandoahGCMode=passive",          concurrent);
-        shouldPassAll("-XX:ShenandoahGCMode=passive",          traversal);
+        shouldPassAll("-XX:ShenandoahGCMode=passive",          iu);
     }
 
     private static void shouldFailAll(String h, String[] barriers) throws Exception {
@@ -70,7 +69,7 @@ public class TestWrongBarrierDisable {
             );
             OutputAnalyzer output = new OutputAnalyzer(pb.start());
             output.shouldHaveExitValue(1);
-            output.shouldContain("Heuristics needs ");
+            output.shouldContain("GC mode needs ");
             output.shouldContain("to work correctly");
         }
     }

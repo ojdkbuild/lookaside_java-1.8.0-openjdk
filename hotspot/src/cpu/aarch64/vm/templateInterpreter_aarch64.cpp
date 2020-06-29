@@ -693,7 +693,7 @@ address InterpreterGenerator::generate_Reference_get_entry(void) {
   const int referent_offset = java_lang_ref_Reference::referent_offset;
   guarantee(referent_offset > 0, "referent offset not initialized");
 
-  if (UseG1GC || (UseShenandoahGC && ShenandoahKeepAliveBarrier)) {
+  if (UseG1GC || (UseShenandoahGC && ShenandoahSATBBarrier)) {
     Label slow_path;
     const Register local_0 = c_rarg0;
     // Check if local 0 != NULL
@@ -1071,9 +1071,11 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
   // pass JNIEnv
   __ add(c_rarg0, rthread, in_bytes(JavaThread::jni_environment_offset()));
 
-  // It is enough that the pc() points into the right code
-  // segment. It does not have to be the correct return pc.
-  __ set_last_Java_frame(esp, rfp, (address)NULL, rscratch1);
+  // Set the last Java PC in the frame anchor to be the return address from
+  // the call to the native method: this will allow the debugger to
+  // generate an accurate stack trace.
+  Label native_return;
+  __ set_last_Java_frame(esp, rfp, native_return, rscratch1);
 
   // change thread state
 #ifdef ASSERT
@@ -1094,6 +1096,7 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
 
   // Call the native method.
   __ blr(r10);
+  __ bind(native_return);
   __ maybe_isb();
   __ get_method(rmethod);
   // result potentially in r0 or v0
@@ -1187,7 +1190,7 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
     // Resolve jweak.
     __ ldr(r0, Address(r0, -JNIHandles::weak_tag_value));
 #if INCLUDE_ALL_GCS
-    if (UseG1GC || (UseShenandoahGC && ShenandoahKeepAliveBarrier)) {
+    if (UseG1GC || (UseShenandoahGC && ShenandoahSATBBarrier)) {
       __ enter();                   // Barrier may call runtime.
       __ g1_write_barrier_pre(noreg /* obj */,
                               r0 /* pre_val */,

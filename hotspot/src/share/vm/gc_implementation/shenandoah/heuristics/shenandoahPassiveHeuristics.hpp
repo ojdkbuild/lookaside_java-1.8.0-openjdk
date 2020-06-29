@@ -24,7 +24,7 @@
 #ifndef SHARE_VM_GC_SHENANDOAH_HEURISTICS_SHENANDOAHPASSIVEHEURISTICS_HPP
 #define SHARE_VM_GC_SHENANDOAH_HEURISTICS_SHENANDOAHPASSIVEHEURISTICS_HPP
 
-#include "gc_implementation/shenandoah/shenandoahHeuristics.hpp"
+#include "gc_implementation/shenandoah/heuristics/shenandoahHeuristics.hpp"
 
 class ShenandoahPassiveHeuristics : public ShenandoahHeuristics {
 public:
@@ -40,11 +40,9 @@ public:
                                                      RegionData* data, size_t data_size,
                                                      size_t free);
 
-  virtual const char* name();
-
-  virtual bool is_diagnostic();
-
-  virtual bool is_experimental();
+  virtual const char* name()     { return "Passive"; }
+  virtual bool is_diagnostic()   { return true; }
+  virtual bool is_experimental() { return false; }
 };
 
 #endif // SHARE_VM_GC_SHENANDOAH_HEURISTICS_SHENANDOAHPASSIVEHEURISTICS_HPP

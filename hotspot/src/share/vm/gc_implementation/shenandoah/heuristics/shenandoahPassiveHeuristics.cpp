@@ -25,7 +25,8 @@
 
 #include "gc_implementation/shenandoah/heuristics/shenandoahPassiveHeuristics.hpp"
 #include "gc_implementation/shenandoah/shenandoahCollectionSet.hpp"
-#include "gc_implementation/shenandoah/shenandoahHeapRegion.hpp"
+#include "gc_implementation/shenandoah/shenandoahHeap.inline.hpp"
+#include "gc_implementation/shenandoah/shenandoahHeapRegion.inline.hpp"
 #include "gc_implementation/shenandoah/shenandoahLogging.hpp"
 
 bool ShenandoahPassiveHeuristics::should_start_gc() const {
@@ -74,16 +75,4 @@ void ShenandoahPassiveHeuristics::choose_collection_set_from_regiondata(Shenando
       cset->add_region(r);
     }
   }
-}
-
-const char* ShenandoahPassiveHeuristics::name() {
-  return "passive";
-}
-
-bool ShenandoahPassiveHeuristics::is_diagnostic() {
-  return true;
-}
-
-bool ShenandoahPassiveHeuristics::is_experimental() {
-  return false;
 }

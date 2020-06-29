@@ -1750,7 +1750,6 @@ void Arguments::set_shenandoah_gc_flags() {
 
   FLAG_SET_DEFAULT(ShenandoahSATBBarrier,            false);
   FLAG_SET_DEFAULT(ShenandoahLoadRefBarrier,         false);
-  FLAG_SET_DEFAULT(ShenandoahKeepAliveBarrier,       false);
   FLAG_SET_DEFAULT(ShenandoahStoreValEnqueueBarrier, false);
   FLAG_SET_DEFAULT(ShenandoahCASBarrier,             false);
   FLAG_SET_DEFAULT(ShenandoahCloneBarrier,           false);
@@ -1863,7 +1862,6 @@ void Arguments::set_shenandoah_gc_flags() {
   if (ShenandoahVerifyOptoBarriers &&
           (!FLAG_IS_DEFAULT(ShenandoahSATBBarrier)    ||
            !FLAG_IS_DEFAULT(ShenandoahLoadRefBarrier) ||
-           !FLAG_IS_DEFAULT(ShenandoahKeepAliveBarrier)       ||
            !FLAG_IS_DEFAULT(ShenandoahStoreValEnqueueBarrier) ||
            !FLAG_IS_DEFAULT(ShenandoahCASBarrier)     ||
            !FLAG_IS_DEFAULT(ShenandoahCloneBarrier)
@@ -1877,21 +1875,6 @@ void Arguments::set_shenandoah_gc_flags() {
 #endif // COMPILER2
 
 #if INCLUDE_ALL_GCS
-  if (AlwaysPreTouch) {
-    // Shenandoah handles pre-touch on its own. It does not let the
-    // generic storage code to do the pre-touch before Shenandoah has
-    // a chance to do it on its own.
-    FLAG_SET_DEFAULT(AlwaysPreTouch, false);
-    FLAG_SET_DEFAULT(ShenandoahAlwaysPreTouch, true);
-  }
-
-  if (ShenandoahAlwaysPreTouch) {
-    if (!FLAG_IS_DEFAULT(ShenandoahUncommit)) {
-      warning("AlwaysPreTouch is enabled, disabling ShenandoahUncommit");
-    }
-    FLAG_SET_DEFAULT(ShenandoahUncommit, false);
-  }
-
   if ((InitialHeapSize == MaxHeapSize) && ShenandoahUncommit) {
     if (PrintGC) {
       tty->print_cr("Min heap equals to max heap, disabling ShenandoahUncommit");
@@ -2350,15 +2333,6 @@ void check_gclog_consistency() {
   if (FLAG_IS_DEFAULT(LogEventsBufferEntries)) {
     FLAG_SET_DEFAULT(LogEventsBufferEntries, 250);
   }
-
-#if INCLUDE_ALL_GCS
-  if (AlwaysPreTouch || ShenandoahAlwaysPreTouch) {
-    if (!FLAG_IS_DEFAULT(ShenandoahUncommitDelay)) {
-      warning("AlwaysPreTouch is enabled, disabling ShenandoahUncommitDelay");
-    }
-    FLAG_SET_DEFAULT(ShenandoahUncommitDelay, max_uintx);
-  }
-#endif
 }
 
 // This function is called for -Xloggc:<filename>, it can be used
@@ -3687,8 +3661,7 @@ void Arguments::fix_appclasspath() {
       src ++;
     }
 
-    char* copy = AllocateHeap(strlen(src) + 1, mtInternal);
-    strncpy(copy, src, strlen(src) + 1);
+    char* copy = os::strdup(src, mtInternal);
 
     // trim all trailing empty paths
     for (char* tail = copy + strlen(copy) - 1; tail >= copy && *tail == separator; tail--) {
@@ -4067,18 +4040,14 @@ static char* get_shared_archive_path() {
     if (end != NULL) *end = '\0';
     size_t jvm_path_len = strlen(jvm_path);
     size_t file_sep_len = strlen(os::file_separator());
-    shared_archive_path = NEW_C_HEAP_ARRAY(char, jvm_path_len +
-        file_sep_len + 20, mtInternal);
+    const size_t len = jvm_path_len + file_sep_len + 20;
+    shared_archive_path = NEW_C_HEAP_ARRAY(char, len, mtInternal);
     if (shared_archive_path != NULL) {
-      strncpy(shared_archive_path, jvm_path, jvm_path_len + 1);
-      strncat(shared_archive_path, os::file_separator(), file_sep_len);
-      strncat(shared_archive_path, "classes.jsa", 11);
+      jio_snprintf(shared_archive_path, len, "%s%sclasses.jsa",
+        jvm_path, os::file_separator());
     }
   } else {
-    shared_archive_path = NEW_C_HEAP_ARRAY(char, strlen(SharedArchiveFile) + 1, mtInternal);
-    if (shared_archive_path != NULL) {
-      strncpy(shared_archive_path, SharedArchiveFile, strlen(SharedArchiveFile) + 1);
-    }
+    shared_archive_path = os::strdup(SharedArchiveFile, mtInternal);
   }
   return shared_archive_path;
 }

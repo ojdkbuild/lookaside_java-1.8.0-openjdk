@@ -25,6 +25,7 @@
 #define SHARE_VM_GC_SHENANDOAH_SHENANDOAHPACER_HPP
 
 #include "gc_implementation/shenandoah/shenandoahNumberSeq.hpp"
+#include "gc_implementation/shenandoah/shenandoahPadding.hpp"
 #include "memory/allocation.hpp"
 
 class ShenandoahHeap;
@@ -43,20 +44,22 @@ private:
   ShenandoahHeap* _heap;
   BinaryMagnitudeSeq _delays;
   TruncatedSeq* _progress_history;
+  Monitor* _wait_monitor;
 
   volatile intptr_t _epoch;
   volatile jdouble _tax_rate;
 
-  char _pad0[DEFAULT_CACHE_LINE_SIZE];
+  shenandoah_padding(0);
   volatile intptr_t _budget;
-  char _pad1[DEFAULT_CACHE_LINE_SIZE];
+  shenandoah_padding(1);
   volatile intptr_t _progress;
-  char _pad2[DEFAULT_CACHE_LINE_SIZE];
+  shenandoah_padding(2);
 
 public:
   ShenandoahPacer(ShenandoahHeap* heap) :
           _heap(heap),
           _progress_history(new TruncatedSeq(5)),
+          _wait_monitor(new Monitor(Mutex::leaf, "_wait_monitor", true)),
           _epoch(0),
           _tax_rate(1),
           _budget(0),
@@ -67,7 +70,6 @@ public:
   void setup_for_mark();
   void setup_for_evac();
   void setup_for_updaterefs();
-  void setup_for_traversal();
 
   void setup_for_reset();
   void setup_for_preclean();
@@ -93,6 +95,9 @@ private:
   void restart_with(jlong non_taxable_bytes, jdouble tax_rate);
 
   size_t update_and_get_progress_history();
+
+  void wait(size_t time_ms);
+  void notify_waiters();
 };
 
 #endif //SHARE_VM_GC_SHENANDOAH_SHENANDOAHPACER_HPP

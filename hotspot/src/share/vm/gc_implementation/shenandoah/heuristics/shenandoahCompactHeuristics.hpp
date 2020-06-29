@@ -24,7 +24,7 @@
 #ifndef SHARE_VM_GC_SHENANDOAH_HEURISTICS_SHENANDOAHCOMPACTHEURISTICS_HPP
 #define SHARE_VM_GC_SHENANDOAH_HEURISTICS_SHENANDOAHCOMPACTHEURISTICS_HPP
 
-#include "gc_implementation/shenandoah/shenandoahHeuristics.hpp"
+#include "gc_implementation/shenandoah/heuristics/shenandoahHeuristics.hpp"
 
 class ShenandoahCompactHeuristics : public ShenandoahHeuristics {
 public:
@@ -36,11 +36,9 @@ public:
                                                      RegionData* data, size_t size,
                                                      size_t actual_free);
 
-  virtual const char* name();
-
-  virtual bool is_diagnostic();
-
-  virtual bool is_experimental();
+  virtual const char* name()     { return "Compact"; }
+  virtual bool is_diagnostic()   { return false; }
+  virtual bool is_experimental() { return false; }
 };
 
 #endif // SHARE_VM_GC_SHENANDOAH_HEURISTICS_SHENANDOAHCOMPACTHEURISTICS_HPP
