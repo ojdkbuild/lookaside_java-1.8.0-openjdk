@@ -584,6 +584,7 @@ readCEN(jzfile *zip, jint knownTotal)
     jint endhdrlen = ENDHDR;
     jzcell *entries;
     jint *table;
+    unsigned char end64buf[ZIP64_ENDHDR];
 
     /* Clear previous zip error */
     zip->msg = NULL;
@@ -598,7 +599,6 @@ readCEN(jzfile *zip, jint knownTotal)
     cenlen = ENDSIZ(endbuf);
     cenoff = ENDOFF(endbuf);
     total  = ENDTOT(endbuf);
-    unsigned char end64buf[ZIP64_ENDHDR];
     if ((end64pos = findEND64(zip, end64buf, endpos)) != -1) {
 	// end64 candidate found,
 	cenlen64 = ZIP64_ENDSIZ(end64buf);
