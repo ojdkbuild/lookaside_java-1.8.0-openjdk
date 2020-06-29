@@ -120,7 +120,7 @@ public:
 };
 
 G1StringDedupEntryCache::G1StringDedupEntryCache(size_t max_size) :
-  _nlists(MAX2(ParallelGCThreads, (size_t)1)),
+  _nlists(MAX2(ParallelGCThreads, (uintx)1)),
   _max_list_length(0),
   _cached(PaddedArray<G1StringDedupEntryList, mtGC>::create_unfreeable((uint)_nlists)),
   _overflowed(PaddedArray<G1StringDedupEntryList, mtGC>::create_unfreeable((uint)_nlists)) {
