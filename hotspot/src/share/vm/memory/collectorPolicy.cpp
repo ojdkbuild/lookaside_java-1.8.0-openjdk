@@ -385,7 +385,7 @@ void TwoGenerationCollectorPolicy::initialize_flags() {
       uintx calculated_size = NewSize + OldSize;
       double shrink_factor = (double) MaxHeapSize / calculated_size;
       uintx smaller_new_size = align_size_down((uintx)(NewSize * shrink_factor), _gen_alignment);
-      FLAG_SET_ERGO(uintx, NewSize, MAX2(young_gen_size_lower_bound(), smaller_new_size));
+      FLAG_SET_ERGO(uintx, NewSize, MAX2(young_gen_size_lower_bound(), (size_t)smaller_new_size));
       _initial_gen0_size = NewSize;
 
       // OldSize is already aligned because above we aligned MaxHeapSize to
@@ -433,7 +433,7 @@ void GenCollectorPolicy::initialize_size_info() {
     // yield a size that is too small) and bound it by MaxNewSize above.
     // Ergonomics plays here by previously calculating the desired
     // NewSize and MaxNewSize.
-    max_new_size = MIN2(MAX2(max_new_size, NewSize), MaxNewSize);
+    max_new_size = MIN2(MAX2(max_new_size, (size_t)NewSize), (size_t)MaxNewSize);
   }
   assert(max_new_size > 0, "All paths should set max_new_size");
 
@@ -455,24 +455,23 @@ void GenCollectorPolicy::initialize_size_info() {
       // lower limit.
       _min_gen0_size = NewSize;
       desired_new_size = NewSize;
-      max_new_size = MAX2(max_new_size, NewSize);
+      max_new_size = MAX2(max_new_size, (size_t)NewSize);
     } else if (FLAG_IS_ERGO(NewSize)) {
       // If NewSize is set ergonomically, we should use it as a lower
       // limit, but use NewRatio to calculate the initial size.
       _min_gen0_size = NewSize;
       desired_new_size =
-        MAX2(scale_by_NewRatio_aligned(_initial_heap_byte_size), NewSize);
-      max_new_size = MAX2(max_new_size, NewSize);
+        MAX2(scale_by_NewRatio_aligned(_initial_heap_byte_size), (size_t)NewSize);
+      max_new_size = MAX2(max_new_size, (size_t)NewSize);
     } else {
       // For the case where NewSize is the default, use NewRatio
       // to size the minimum and initial generation sizes.
       // Use the default NewSize as the floor for these values.  If
       // NewRatio is overly large, the resulting sizes can be too
       // small.
-      _min_gen0_size = MAX2(scale_by_NewRatio_aligned(_min_heap_byte_size), NewSize);
+      _min_gen0_size = MAX2(scale_by_NewRatio_aligned(_min_heap_byte_size), (size_t)NewSize);
       desired_new_size =
-        MAX2(scale_by_NewRatio_aligned(_initial_heap_byte_size), NewSize);
-    }
+        MAX2(scale_by_NewRatio_aligned(_initial_heap_byte_size), (size_t)NewSize);    }
 
     assert(_min_gen0_size > 0, "Sanity check");
     _initial_gen0_size = desired_new_size;
@@ -573,7 +572,7 @@ void TwoGenerationCollectorPolicy::initialize_size_info() {
   } else {
     // It's been explicitly set on the command line.  Use the
     // OldSize and then determine the consequences.
-    _min_gen1_size = MIN2(OldSize, _min_heap_byte_size - _min_gen0_size);
+    _min_gen1_size = MIN2((size_t)OldSize, _min_heap_byte_size - _min_gen0_size);
     _initial_gen1_size = OldSize;
 
     // If the user has explicitly set an OldSize that is inconsistent
