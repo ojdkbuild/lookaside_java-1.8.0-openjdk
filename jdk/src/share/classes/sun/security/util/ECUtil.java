@@ -41,6 +41,9 @@ import sun.security.x509.X509Key;
 
 public final class ECUtil {
 
+    /* Are we debugging ? */
+    private static final Debug debug = Debug.getInstance("ecc");
+
     // Used by SunPKCS11 and SunJSSE.
     public static ECPoint decodePoint(byte[] data, EllipticCurve curve)
             throws IOException {
@@ -90,6 +93,10 @@ public final class ECUtil {
     }
 
     public static AlgorithmParameters getECParameters(Provider p) {
+        return getECParameters(p, false);
+    }
+
+    public static AlgorithmParameters getECParameters(Provider p, boolean throwException) {
         try {
             if (p != null) {
                 return AlgorithmParameters.getInstance("EC", p);
@@ -97,13 +104,21 @@ public final class ECUtil {
 
             return AlgorithmParameters.getInstance("EC");
         } catch (NoSuchAlgorithmException nsae) {
-            throw new RuntimeException(nsae);
+            if (throwException) {
+                throw new RuntimeException(nsae);
+            } else {
+                // ECC provider is optional so just return null
+                if (debug != null) {
+                    debug.println("Provider unavailable: " + nsae);
+                }
+                return null;
+            }
         }
     }
 
     public static byte[] encodeECParameterSpec(Provider p,
                                                ECParameterSpec spec) {
-        AlgorithmParameters parameters = getECParameters(p);
+        AlgorithmParameters parameters = getECParameters(p, true);
 
         try {
             parameters.init(spec);
@@ -122,11 +137,16 @@ public final class ECUtil {
     public static ECParameterSpec getECParameterSpec(Provider p,
                                                      ECParameterSpec spec) {
         AlgorithmParameters parameters = getECParameters(p);
+        if (parameters == null)
+            return null;
 
         try {
             parameters.init(spec);
             return parameters.getParameterSpec(ECParameterSpec.class);
         } catch (InvalidParameterSpecException ipse) {
+            if (debug != null) {
+                debug.println("Invalid parameter specification: " + ipse);
+            }
             return null;
         }
     }
@@ -135,34 +155,49 @@ public final class ECUtil {
                                                      byte[] params)
             throws IOException {
         AlgorithmParameters parameters = getECParameters(p);
+        if (parameters == null)
+            return null;
 
         parameters.init(params);
 
         try {
             return parameters.getParameterSpec(ECParameterSpec.class);
         } catch (InvalidParameterSpecException ipse) {
+            if (debug != null) {
+                debug.println("Invalid parameter specification: " + ipse);
+            }
             return null;
         }
     }
 
     public static ECParameterSpec getECParameterSpec(Provider p, String name) {
         AlgorithmParameters parameters = getECParameters(p);
+        if (parameters == null)
+            return null;
 
         try {
             parameters.init(new ECGenParameterSpec(name));
             return parameters.getParameterSpec(ECParameterSpec.class);
         } catch (InvalidParameterSpecException ipse) {
+            if (debug != null) {
+                debug.println("Invalid parameter specification: " + ipse);
+            }
             return null;
         }
     }
 
     public static ECParameterSpec getECParameterSpec(Provider p, int keySize) {
         AlgorithmParameters parameters = getECParameters(p);
+        if (parameters == null)
+            return null;
 
         try {
             parameters.init(new ECKeySizeParameterSpec(keySize));
             return parameters.getParameterSpec(ECParameterSpec.class);
         } catch (InvalidParameterSpecException ipse) {
+            if (debug != null) {
+                debug.println("Invalid parameter specification: " + ipse);
+            }
             return null;
         }
 
@@ -171,11 +206,16 @@ public final class ECUtil {
     public static String getCurveName(Provider p, ECParameterSpec spec) {
         ECGenParameterSpec nameSpec;
         AlgorithmParameters parameters = getECParameters(p);
+        if (parameters == null)
+            return null;
 
         try {
             parameters.init(spec);
             nameSpec = parameters.getParameterSpec(ECGenParameterSpec.class);
         } catch (InvalidParameterSpecException ipse) {
+            if (debug != null) {
+                debug.println("Invalid parameter specification: " + ipse);
+            }
             return null;
         }
 

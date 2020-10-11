@@ -73,6 +73,7 @@ public class Debug {
         System.err.println("certpath      PKIX CertPathBuilder and");
         System.err.println("              CertPathValidator debugging");
         System.err.println("combiner      SubjectDomainCombiner debugging");
+        System.err.println("ecc           Elliptic Curve Cryptography debugging");
         System.err.println("gssloginconfig");
         System.err.println("              GSS LoginConfigImpl debugging");
         System.err.println("configfile    JAAS ConfigFile loading");
