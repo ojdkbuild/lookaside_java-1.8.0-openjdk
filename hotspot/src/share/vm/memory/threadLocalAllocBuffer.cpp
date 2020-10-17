@@ -251,13 +251,13 @@ size_t ThreadLocalAllocBuffer::initial_desired_size() {
   size_t init_sz = 0;
 
   if (TLABSize > 0) {
-    init_sz = TLABSize / HeapWordSize;
+    init_sz = (size_t)(TLABSize / HeapWordSize);
   } else if (global_stats() != NULL) {
     // Initial size is a function of the average number of allocating threads.
     unsigned nof_threads = global_stats()->allocating_threads_avg();
 
-    init_sz  = (Universe::heap()->tlab_capacity(myThread()) / HeapWordSize) /
-                      (nof_threads * target_refills());
+    init_sz  = (size_t)((Universe::heap()->tlab_capacity(myThread()) / HeapWordSize) /
+                      (nof_threads * target_refills()));
     init_sz = align_object_size(init_sz);
   }
   init_sz = MIN2(MAX2(init_sz, min_size()), max_size());
