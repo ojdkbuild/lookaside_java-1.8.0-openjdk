@@ -246,9 +246,6 @@ ifneq ($(FREETYPE_BUNDLE_LIB_PATH), )
 endif
 
 ##########################################################################################
-# ojdkbuild freetype
-COPY_FILES += $(FREETYPE_SHARED_LIB_PATH)
-##########################################################################################
 
 # Copy the microsoft runtime libraries on windows
 ifeq ($(OPENJDK_TARGET_OS), windows)
