@@ -32,6 +32,10 @@
 
 #include "defines.h"
 
+#if defined(linux) && defined(__x86_64)
+#include "alt_main.h"
+#endif
+
 #ifdef _MSC_VER
 #if _MSC_VER > 1400 && _MSC_VER < 1600
 
