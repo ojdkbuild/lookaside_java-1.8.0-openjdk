@@ -628,7 +628,7 @@ final class P11Cipher extends CipherSpi {
                 throw (ShortBufferException)
                         (new ShortBufferException().initCause(e));
             }
-            reset(false);
+            reset(true);
             throw new ProviderException("update() failed", e);
         }
     }
@@ -746,7 +746,7 @@ final class P11Cipher extends CipherSpi {
                 throw (ShortBufferException)
                         (new ShortBufferException().initCause(e));
             }
-            reset(false);
+            reset(true);
             throw new ProviderException("update() failed", e);
         }
     }
