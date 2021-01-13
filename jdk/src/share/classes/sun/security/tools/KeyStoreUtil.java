@@ -103,14 +103,9 @@ public class KeyStoreUtil {
         throws Exception
     {
         String sep = File.separator;
-        /* Check system cacerts DB first; /etc/pki/java/cacerts */
-        File file = new File(sep + "etc" + sep + "pki" + sep
-                             + "java" + sep + "cacerts");
-        if (!file.exists()) {
-            file = new File(System.getProperty("java.home") + sep
-                            + "lib" + sep + "security" + sep
-                            + "cacerts");
-        }
+        File file = new File(System.getProperty("java.home") + sep
+                             + "lib" + sep + "security" + sep
+                             + "cacerts");
         if (!file.exists()) {
             return null;
         }
