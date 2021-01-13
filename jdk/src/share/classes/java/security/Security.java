@@ -45,9 +45,6 @@ import sun.security.jca.*;
  * implementation-specific location, which is typically the properties file
  * {@code lib/security/java.security} in the Java installation directory.
  *
- * <p>Additional default values of security properties are read from a
- * system-specific location, if available.</p>
- *
  * @author Benjamin Renaud
  */
 
@@ -56,10 +53,6 @@ public final class Security {
     /* Are we debugging? -- for developers */
     private static final Debug sdebug =
                         Debug.getInstance("properties");
-
-    /* System property file*/
-    private static final String SYSTEM_PROPERTIES =
-        "/etc/crypto-policies/back-ends/java.config";
 
     /* The java.security properties */
     private static Properties props;
@@ -111,7 +104,6 @@ public final class Security {
                 if (sdebug != null) {
                     sdebug.println("reading security properties file: " +
                                 propFile);
-                    sdebug.println(props.toString());
                 }
             } catch (IOException e) {
                 if (sdebug != null) {
