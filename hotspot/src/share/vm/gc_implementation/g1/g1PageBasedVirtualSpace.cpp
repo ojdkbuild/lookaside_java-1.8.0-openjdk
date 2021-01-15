@@ -117,7 +117,7 @@ size_t G1PageBasedVirtualSpace::uncommitted_size()  const {
   return reserved_size() - committed_size();
 }
 
-size_t G1PageBasedVirtualSpace::addr_to_page_index(char* addr) const {
+uintptr_t G1PageBasedVirtualSpace::addr_to_page_index(char* addr) const {
   return (addr - _low_boundary) / _page_size;
 }
 

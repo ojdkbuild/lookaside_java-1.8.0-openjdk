@@ -3916,7 +3916,7 @@ void CMTask::drain_local_queue(bool partially) {
   // of things to do) or totally (at the very end).
   size_t target_size;
   if (partially) {
-    target_size = MIN2((size_t)_task_queue->max_elems()/3, GCDrainStackTargetSize);
+    target_size = MIN2((size_t)(_task_queue->max_elems()/3), (size_t) GCDrainStackTargetSize);
   } else {
     target_size = 0;
   }
@@ -4715,7 +4715,7 @@ size_t G1PrintRegionLivenessInfoClosure::get_hum_bytes(size_t* hum_bytes) {
   // The > 0 check is to deal with the prev and next live bytes which
   // could be 0.
   if (*hum_bytes > 0) {
-    bytes = MIN2(HeapRegion::GrainBytes, *hum_bytes);
+    bytes = MIN2(HeapRegion::GrainBytes, (size_t)*hum_bytes);
     *hum_bytes -= bytes;
   }
   return bytes;
