@@ -655,6 +655,7 @@ LIBDL
 LIBM
 LIBZIP_CAN_USE_MMAP
 USE_EXTERNAL_LIBZ
+FREETYPE_SHARED_LIB_PATH
 USE_EXTERNAL_LIBGIF
 USE_EXTERNAL_LIBJPEG
 FONTCONFIG_CFLAGS
@@ -48939,7 +48940,8 @@ $as_echo "system not found" >&6; }
     as_fn_error $? "Invalid value for --with-zlib: ${with_zlib}, use 'system' or 'bundled'" "$LINENO" 5
   fi
 
-
+  # ojdkbuild
+  FREETYPE_SHARED_LIB_PATH=`pkg-config freetype --variable=shared_lib_path`
 
   ###############################################################################
   LIBZIP_CAN_USE_MMAP=true
