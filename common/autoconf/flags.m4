@@ -418,6 +418,8 @@ AC_DEFUN_ONCE([FLAGS_SETUP_COMPILER_FLAGS_FOR_JDK],
     FLAGS_COMPILER_CHECK_ARGUMENTS([$REALIGN_CFLAG -Werror], [],
       AC_MSG_ERROR([The selected compiler $CXX does not support -mstackrealign! Try to put another compiler in the path.])
     )
+    CFLAGS_JDK="${CFLAGS_JDK} ${REALIGN_CFLAG}"
+    CXXFLAGS_JDK="${CXXFLAGS_JDK} ${REALIGN_CFLAG}"
     AC_SUBST([REALIGN_CFLAG])
   fi
 
