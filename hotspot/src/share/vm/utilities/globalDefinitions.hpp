@@ -1456,12 +1456,21 @@ inline intptr_t p2i(const void * p) {
 
 #define INTPTR_FORMAT_W(width)   "%" #width PRIxPTR
 
+#if defined(S390) && !defined(_LP64)
+#define SSIZE_FORMAT          "%z"   PRIdPTR
+#define SIZE_FORMAT           "%z"   PRIuPTR
+#define SIZE_FORMAT_HEX       "0x%z" PRIxPTR
+#define SSIZE_FORMAT_W(width) "%"   #width "z" PRIdPTR
+#define SIZE_FORMAT_W(width)  "%"   #width "z" PRIuPTR
+#define SIZE_FORMAT_HEX_W(width) "0x%" #width "z" PRIxPTR
+#else   // !S390
 #define SSIZE_FORMAT          "%"   PRIdPTR
 #define SIZE_FORMAT           "%"   PRIuPTR
 #define SIZE_FORMAT_HEX       "0x%" PRIxPTR
 #define SSIZE_FORMAT_W(width) "%"   #width PRIdPTR
 #define SIZE_FORMAT_W(width)  "%"   #width PRIuPTR
 #define SIZE_FORMAT_HEX_W(width) "0x%" #width PRIxPTR
+#endif  // S390
 
 #define INTX_FORMAT           "%" PRIdPTR
 #define UINTX_FORMAT          "%" PRIuPTR
