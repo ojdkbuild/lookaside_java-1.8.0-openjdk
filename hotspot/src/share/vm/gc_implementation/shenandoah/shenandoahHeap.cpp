@@ -659,7 +659,7 @@ size_t ShenandoahHeap::max_capacity() const {
 }
 
 size_t ShenandoahHeap::soft_max_capacity() const {
-  size_t v = OrderAccess::load_acquire((volatile size_t*)&_soft_max_size);
+  size_t v = OrderAccess::load_acquire((volatile jlong*)&_soft_max_size);
   assert(min_capacity() <= v && v <= max_capacity(),
          err_msg("Should be in bounds: " SIZE_FORMAT " <= " SIZE_FORMAT " <= " SIZE_FORMAT,
                  min_capacity(), v, max_capacity()));
