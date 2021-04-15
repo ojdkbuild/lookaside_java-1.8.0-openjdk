@@ -1058,7 +1058,8 @@ public:
     size_t expected = msp.scale_by_NewRatio_aligned(initial_heap_size);
     assert(msp.initial_gen0_size() == expected, err_msg("%zu != %zu", msp.initial_gen0_size(), expected));
     assert(FLAG_IS_ERGO(NewSize) && NewSize == expected,
-        err_msg("NewSize should have been set ergonomically to %zu, but was %zu", expected, NewSize));
+        err_msg("NewSize should have been set ergonomically to " SIZE_FORMAT ", but was " UINTX_FORMAT,
+		expected, NewSize));
   }
 
 private:
