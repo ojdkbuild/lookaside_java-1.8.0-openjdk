@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2019, Red Hat, Inc. All rights reserved.
+ * Copyright (c) 2013, 2021, Red Hat, Inc. All rights reserved.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -489,12 +489,13 @@ void ShenandoahConcurrentMark::finish_mark_from_roots(bool full_gc) {
   // JNIHandle::weak_oops_do() to cleanup JNI and JVMTI weak oops.
   if (_heap->process_references()) {
     weak_refs_work(full_gc);
-  } else {
-    weak_roots_work(full_gc);
   }
 
   // And finally finish class unloading
   if (_heap->unload_classes()) {
+    // We don't mark through weak roots with class unloading cycle,
+    // so process them here.
+    weak_roots_work(full_gc);
     _heap->unload_classes_and_cleanup_tables(full_gc);
   } else if (ShenandoahStringDedup::is_enabled()) {
     ShenandoahStringDedup::parallel_cleanup();

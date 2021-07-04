@@ -570,11 +570,11 @@ public:
 
 class VerifyThreadGCState : public ThreadClosure {
 private:
-  const char* _label;
-  char _expected;
+  const char* const _label;
+         char const _expected;
 
 public:
-  VerifyThreadGCState(const char* label, char expected) : _expected(expected) {}
+  VerifyThreadGCState(const char* label, char expected) : _label(label), _expected(expected) {}
   void do_thread(Thread* t) {
     assert(t->is_Java_thread(), "sanity");
     char actual = ((JavaThread*)t)->gc_state();
