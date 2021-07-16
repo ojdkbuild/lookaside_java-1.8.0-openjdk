@@ -25779,7 +25779,7 @@ $as_echo "$as_me: directory within the Visual Studio installation" >&6;}
     fi
   fi
 
-  VS_ENV_CMD=""
+  VS_ENV_CMD=OJDKBUILD
 
   if test "x$VS_COMNTOOLS" != x; then
 
@@ -26331,7 +26331,7 @@ $as_echo "$as_me: Found $VS_DESCRIPTION" >&6;}
 
   # If we have a devkit, skip all of the below.
   if test "x$DEVKIT_VS_VERSION" = x; then
-    if test "x$VS_ENV_CMD" != x; then
+    if test "x$VS_ENV_CMD" != xOJDKBUILD; then
       # We have found a Visual Studio environment on disk, let's extract variables from the vsvars bat file.
 
   if test "x$OPENJDK_BUILD_OS_ENV" = "xwindows.cygwin"; then
@@ -26759,10 +26759,10 @@ $as_echo "$as_me: or run \"bash.exe -l\" from a VS command prompt and then run c
 
     # Reset path to VS_PATH. It will include everything that was on PATH at the time we
     # ran TOOLCHAIN_SETUP_VISUAL_STUDIO_ENV.
-    PATH="$VS_PATH"
+    # PATH="$VS_PATH"
     # The microsoft toolchain also requires INCLUDE and LIB to be set.
-    export INCLUDE="$VS_INCLUDE"
-    export LIB="$VS_LIB"
+    # export INCLUDE="$VS_INCLUDE"
+    # export LIB="$VS_LIB"
   fi
 
   # Before we locate the compilers, we need to sanitize the Xcode build environment
