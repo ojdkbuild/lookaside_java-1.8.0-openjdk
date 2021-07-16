@@ -120,7 +120,7 @@ public final class ECKeyPairGenerator extends KeyPairGeneratorSpi {
     private static void ensureCurveIsSupported(ECParameterSpec ecSpec)
         throws InvalidAlgorithmParameterException {
 
-        AlgorithmParameters ecParams = ECUtil.getECParameters(null);
+        AlgorithmParameters ecParams = ECUtil.getECParameters(null, true);
         byte[] encodedParams;
         try {
             ecParams.init(ecSpec);
