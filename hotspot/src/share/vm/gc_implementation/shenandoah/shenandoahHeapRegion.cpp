@@ -37,6 +37,7 @@
 #include "runtime/mutexLocker.hpp"
 #include "runtime/os.hpp"
 #include "runtime/safepoint.hpp"
+#include "utilities/align.hpp"
 
 size_t ShenandoahHeapRegion::RegionCount = 0;
 size_t ShenandoahHeapRegion::RegionSizeBytes = 0;
@@ -433,7 +434,7 @@ size_t ShenandoahHeapRegion::block_size(const HeapWord* p) const {
   }
 }
 
-void ShenandoahHeapRegion::setup_sizes(size_t max_heap_size) {
+size_t ShenandoahHeapRegion::setup_sizes(size_t max_heap_size) {
   // Absolute minimums we should not ever break:
   static const size_t MIN_REGION_SIZE = 256*K;
 
@@ -519,14 +520,28 @@ void ShenandoahHeapRegion::setup_sizes(size_t max_heap_size) {
     vm_exit_during_initialization("Invalid -XX:ShenandoahHumongousThreshold option, should be within [1..100]");
   }
 
-  // Make sure region size is at least one large page, if enabled.
-  // Otherwise, uncommitting one region may falsely uncommit the adjacent
-  // regions too.
-  // Also see shenandoahArguments.cpp, where it handles UseLargePages.
-  if (UseLargePages && ShenandoahUncommit) {
-    region_size = MAX2(region_size, os::large_page_size());
+  // Make sure region size and heap size are page aligned.
+  // If large pages are used, we ensure that region size is aligned to large page size if
+  // heap size is large enough to accommodate minimal number of regions. Otherwise, we align
+  // region size to regular page size.
+
+  // Figure out page size to use, and aligns up heap to page size
+  int page_size = os::vm_page_size();
+  if (UseLargePages) {
+    size_t large_page_size = os::large_page_size();
+    max_heap_size = align_up(max_heap_size, large_page_size);
+    if ((max_heap_size / align_up(region_size, large_page_size)) >= MIN_NUM_REGIONS) {
+      page_size = (int)large_page_size;
+    } else {
+      // Should have been checked during argument initialization
+      assert(!ShenandoahUncommit, "Uncommit requires region size aligns to large page size");
+    }
+  } else {
+    max_heap_size = align_up(max_heap_size, page_size);
   }
 
+  // Align region size to page size
+  region_size = align_up(region_size, page_size);
   int region_size_log = log2_long((jlong) region_size);
   // Recalculate the region size to make sure it's a power of
   // 2. This means that region_size is the largest power of 2 that's
@@ -552,7 +567,7 @@ void ShenandoahHeapRegion::setup_sizes(size_t max_heap_size) {
   RegionSizeBytesMask = RegionSizeBytes - 1;
 
   guarantee(RegionCount == 0, "we should only set it once");
-  RegionCount = max_heap_size / RegionSizeBytes;
+  RegionCount = align_up(max_heap_size, RegionSizeBytes) / RegionSizeBytes;
 
   guarantee(HumongousThresholdWords == 0, "we should only set it once");
   HumongousThresholdWords = RegionSizeWords * ShenandoahHumongousThreshold / 100;
@@ -596,6 +611,8 @@ void ShenandoahHeapRegion::setup_sizes(size_t max_heap_size) {
                      byte_size_in_proper_unit(HumongousThresholdBytes), proper_unit_for_byte_size(HumongousThresholdBytes));
   log_info(gc, init)("Max TLAB size: " SIZE_FORMAT "%s",
                      byte_size_in_proper_unit(MaxTLABSizeBytes), proper_unit_for_byte_size(MaxTLABSizeBytes));
+
+  return max_heap_size;
 }
 
 void ShenandoahHeapRegion::do_commit() {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -368,6 +368,8 @@ public:
 
   // The parallel work done by all worker threads.
   void work(uint worker_id) {
+    pre_work_verification();
+
     // Do first pass of code cache cleaning.
     _code_cache_task.work_first_pass(worker_id);
 
@@ -386,6 +388,8 @@ public:
 
     // Clean all klasses that were not unloaded.
     _klass_cleaning_task.work();
+
+    post_work_verification();
   }
 
 };
