@@ -2813,7 +2813,7 @@ public class HttpURLConnection extends java.net.HttpURLConnection {
         /* must save before calling close */
         reuseClient = http;
         InputStream is = http.getInputStream();
-        if (!method.equals("HEAD") || doingNTLMp2ndStage) {
+        if (!method.equals("HEAD")) {
             try {
                 /* we want to read the rest of the response without using the
                  * hurry mechanism, because that would close the connection
