@@ -1186,10 +1186,10 @@ public final class Scanner implements Iterator<String>, Closeable {
             (DecimalFormat)NumberFormat.getNumberInstance(locale);
         DecimalFormatSymbols dfs = DecimalFormatSymbols.getInstance(locale);
 
-        // These must be literalized to avoid collision with regex
-        // metacharacters such as dot or parenthesis
-        groupSeparator =   "\\x{" + Integer.toHexString(dfs.getGroupingSeparator()) + "}";
-        decimalSeparator = "\\x{" + Integer.toHexString(dfs.getDecimalSeparator()) + "}";
+        // Escape separators to avoid them being interpreted as a regex
+        // metacharacter (e.g. '.')
+        groupSeparator = escapeSeparator(dfs.getGroupingSeparator());
+        decimalSeparator = escapeSeparator(dfs.getDecimalSeparator());
 
         // Quoting the nonzero length locale-specific things
         // to avoid potential conflict with metacharacters
@@ -1214,6 +1214,26 @@ public final class Scanner implements Iterator<String>, Closeable {
         floatPattern = null;
 
         return this;
+    }
+
+    /**
+     * Utility method to escape separators so they
+     * are not misinterpreted as regex metacharacters.
+     * We optimise the most common cases by using an
+     * escaped literal rather than the \x construct.
+     *
+     * @param ch the separator character to escape.
+     * @return a {@code String} contained the escaped character.
+     */
+    private static String escapeSeparator(char ch) {
+        switch (ch) {
+            case '\u002c': // ','
+            case '\u002e': // '.'
+            case '\u00a0':
+                return "\\" + ch;
+            default:
+                return "\\x{" + Integer.toHexString(ch) + "}";
+        }
     }
 
     /**
