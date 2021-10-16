@@ -139,7 +139,7 @@ void BinaryMagnitudeSeq::clear() {
 void BinaryMagnitudeSeq::add(size_t val) {
   Atomic::add(val, &_sum);
 
-  int mag = log2_intptr(val) + 1;
+  int mag = log2_long(val) + 1;
 
   // Defensively saturate for product bits:
   if (mag < 0) {
