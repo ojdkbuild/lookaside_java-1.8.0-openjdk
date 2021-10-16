@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,31 +21,42 @@
  * questions.
  */
 
-/*
+import java.awt.Robot;
+import java.util.concurrent.CountDownLatch;
+
+import javax.swing.SwingUtilities;
+
+/**
  * @test
- * @bug 8218201
- * @summary BCEscapeAnalyzer assigns wrong escape state to getClass return value.
- * @run main/othervm -XX:-TieredCompilation -Xcomp -XX:+UnlockDiagnosticVMOptions -XX:DisableIntrinsic=_getClass
- *                   -XX:CompileCommand=quiet -XX:CompileCommand=compileonly,compiler.escapeAnalysis.TestGetClass::test
- *                   -XX:+PrintCompilation compiler.escapeAnalysis.TestGetClass
+ * @key headful
+ * @bug 8166673
  */
+public final class WaitForIdleSyncroizedOnString {
 
-package compiler.escapeAnalysis;
+    private static final String WAIT_LOCK = "Wait Lock";
 
-public class TestGetClass {
-    static Object obj = new Object();
+    private static volatile boolean passed = true;
 
-    public static boolean test() {
-        if (obj.getClass() == Object.class) {
-            synchronized (obj) {
-                return true;
+    public static void main(final String[] args) throws Exception {
+        CountDownLatch go = new CountDownLatch(1);
+        Robot r = new Robot();
+        SwingUtilities.invokeLater(() -> System.out.println("some work"));
+        Thread t = new Thread(() -> {
+            synchronized (WAIT_LOCK) {
+                go.countDown();
+                try {
+                    Thread.sleep(30000);
+                    passed = false;
+                } catch (InterruptedException e) {
+                    System.out.println("e = " + e);
+                }
             }
-        }
-        return false;
-    }
-
-    public static void main(String[] args) {
-        if (!test()) {
+        });
+        t.start();
+        go.await();
+        r.waitForIdle();
+        t.interrupt();
+        if (!passed) {
             throw new RuntimeException("Test failed");
         }
     }

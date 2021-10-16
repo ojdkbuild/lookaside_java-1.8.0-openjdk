@@ -38,6 +38,7 @@
 #include "utilities/ostream.hpp"
 #if INCLUDE_ALL_GCS
 #include "gc_implementation/g1/g1SATBCardTableModRefBS.hpp"
+#include "gc_implementation/shenandoah/shenandoahStringDedup.hpp"
 #endif // INCLUDE_ALL_GCS
 #include "memory/allocation.hpp"
 #include "memory/allocation.inline.hpp"
@@ -1454,7 +1455,7 @@ JNI_ENTRY(jobject, jni_NewObjectA(JNIEnv *env, jclass clazz, jmethodID methodID,
                                env, clazz, (uintptr_t) methodID);
 #endif /* USDT2 */
   jobject obj = NULL;
-  DT_RETURN_MARK(NewObjectA, jobject, (const jobject)obj);
+  DT_RETURN_MARK(NewObjectA, jobject, (const jobject&)obj);
 
   instanceOop i = alloc_object(clazz, CHECK_NULL);
   obj = JNIHandles::make_local(env, i);
@@ -4327,19 +4328,48 @@ JNI_ENTRY(const jchar*, jni_GetStringCritical(JNIEnv *env, jstring string, jbool
   HOTSPOT_JNI_GETSTRINGCRITICAL_ENTRY(
                                       env, string, (uintptr_t *) isCopy);
 #endif /* USDT2 */
-  if (isCopy != NULL) {
-    *isCopy = JNI_FALSE;
+  jchar* ret;
+  if (!UseShenandoahGC) {
+    GC_locker::lock_critical(thread);
+    if (isCopy != NULL) {
+      *isCopy = JNI_FALSE;
+    }
+    oop s = JNIHandles::resolve_non_null(string);
+    int s_len = java_lang_String::length(s);
+    typeArrayOop s_value = java_lang_String::value(s);
+    int s_offset = java_lang_String::offset(s);
+    if (s_len > 0) {
+      ret = s_value->char_at_addr(s_offset);
+    } else {
+      ret = (jchar*) s_value->base(T_CHAR);
+    }
   }
-  oop s = lock_gc_or_pin_object(thread, string);
-  int s_len = java_lang_String::length(s);
-  typeArrayOop s_value = java_lang_String::value(s);
-  int s_offset = java_lang_String::offset(s);
-  const jchar* ret;
-  if (s_len > 0) {
-    ret = s_value->char_at_addr(s_offset);
-  } else {
-    ret = (jchar*) s_value->base(T_CHAR);
+#if INCLUDE_ALL_GCS
+  else {
+    assert(UseShenandoahGC, "This path should only be taken with Shenandoah");
+    oop s = JNIHandles::resolve_non_null(string);
+    if (ShenandoahStringDedup::is_enabled()) {
+      typeArrayOop s_value = java_lang_String::value(s);
+      int s_len = java_lang_String::length(s);
+      ret = NEW_C_HEAP_ARRAY_RETURN_NULL(jchar, s_len + 1, mtInternal);  // add one for zero termination
+      /* JNI Specification states return NULL on OOM */
+      if (ret != NULL) {
+        memcpy(ret, s_value->char_at_addr(0), s_len * sizeof(jchar));
+        ret[s_len] = 0;
+      }
+      if (isCopy != NULL) *isCopy = JNI_TRUE;
+    } else {
+      typeArrayOop s_value = java_lang_String::value(s);
+      s_value = (typeArrayOop) Universe::heap()->pin_object(thread, s_value);
+      ret = (jchar *) s_value->base(T_CHAR);
+      if (isCopy != NULL) *isCopy = JNI_FALSE;
+    }
   }
+#else
+  else {
+    ShouldNotReachHere();
+  }
+#endif
 #ifndef USDT2
   DTRACE_PROBE1(hotspot_jni, GetStringCritical__return, ret);
 #else /* USDT2 */
@@ -4358,8 +4388,28 @@ JNI_ENTRY(void, jni_ReleaseStringCritical(JNIEnv *env, jstring str, const jchar 
   HOTSPOT_JNI_RELEASESTRINGCRITICAL_ENTRY(
                                           env, str, (uint16_t *) chars);
 #endif /* USDT2 */
-  // The str and chars arguments are ignored
-  unlock_gc_or_unpin_object(thread, str);
+  if (!UseShenandoahGC) {
+    // The str and chars arguments are ignored
+    GC_locker::unlock_critical(thread);
+  }
+#if INCLUDE_ALL_GCS
+  else if (ShenandoahStringDedup::is_enabled()) {
+    assert(UseShenandoahGC, "This path should only be taken with Shenandoah");
+    // For copied string value, free jchar array allocated by earlier call to GetStringCritical.
+    // This assumes that ReleaseStringCritical bookends GetStringCritical.
+    FREE_C_HEAP_ARRAY(jchar, chars, mtInternal);
+  } else {
+    assert(UseShenandoahGC, "This path should only be taken with Shenandoah");
+    oop s = JNIHandles::resolve_non_null(str);
+    // For not copied string value, drop the associated gc-locker/pin.
+    typeArrayOop s_value = java_lang_String::value(s);
+    Universe::heap()->unpin_object(thread, s_value);
+  }
+#else
+  else {
+    ShouldNotReachHere();
+  }
+#endif
 #ifndef USDT2
   DTRACE_PROBE(hotspot_jni, ReleaseStringCritical__return);
 #else /* USDT2 */

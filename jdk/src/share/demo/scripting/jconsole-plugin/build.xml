@@ -73,9 +73,6 @@
     <copy todir="${classes.dir}/META-INF/services">
       <fileset dir="${src.dir}/META-INF/services"/>
     </copy>
-    <copy todir="${resources.dir}">
-      <fileset dir="${src.dir}/resources"/>
-    </copy>
   </target>
 
   <target name="all" depends="compile" description="buile deployment bundle">

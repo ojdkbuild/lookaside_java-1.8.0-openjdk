@@ -18,11 +18,9 @@ The following 3 global variables are exposed to the script engine:
     engine      javax.script.ScriptEngine
     plugin      com.sun.tools.jconsole.JConsolePlugin
 
-If you use JavaScript, there are many useful global functions defined in 
-./src/resources/jconsole.js. This is built into the script plugin jar file. 
-In addition, you can add other global functions and global variables by 
-defining those in ~/jconsole.js (or jconsole.<ext> where <ext> is the file 
-extension for your scripting language of choice under your home directory).
+You can add global functions and global variables by defining those in
+~/jconsole.js (or jconsole.<ext> where <ext> is the file extension for
+your scripting language of choice under your home directory).
 
 How do I compile script console plugin?
 
