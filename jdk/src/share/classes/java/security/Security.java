@@ -78,10 +78,6 @@ public final class Security {
                 public boolean isSystemFipsEnabled() {
                     return SystemConfigurator.isSystemFipsEnabled();
                 }
-                @Override
-                public boolean isPlainKeySupportEnabled() {
-                    return SystemConfigurator.isPlainKeySupportEnabled();
-                }
             });
 
         // doPrivileged here because there are multiple
