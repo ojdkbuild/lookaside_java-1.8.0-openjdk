@@ -255,6 +255,33 @@ ifeq ($(ENABLE_DEBUG_SYMBOLS), true)
   endif
 endif
 
+# -Wno-error=cpp is present to allow commented warning in ifdef part of main.c
+$(eval $(call SetupLauncher,alt-java, \
+    -DEXPAND_CLASSPATH_WILDCARDS -DREDHAT_ALT_JAVA -Wno-error=cpp,,,user32.lib comctl32.lib, \
+    $(JDK_OUTPUTDIR)/objs/jli_static.lib, $(JAVA_RC_FLAGS), \
+    $(JDK_TOPDIR)/src/windows/resource/java.rc, $(JDK_OUTPUTDIR)/objs/java_objs,true))
+
+$(JDK_OUTPUTDIR)/bin$(OUTPUT_SUBDIR)/alt-java$(EXE_SUFFIX): $(BUILD_LAUNCHER_alt-java)
+	$(MKDIR) -p $(@D)
+	$(RM) $@
+	$(CP) $(JDK_OUTPUTDIR)/objs/java_objs$(OUTPUT_SUBDIR)/alt-java$(EXE_SUFFIX) $@
+
+$(JDK_OUTPUTDIR)/bin$(OUTPUT_SUBDIR)/alt-java$(DEBUGINFO_EXT): $(BUILD_LAUNCHER_alt-java)
+	$(MKDIR) -p $(@D)
+	$(RM) $@
+	$(CP) $(JDK_OUTPUTDIR)/objs/java_objs$(OUTPUT_SUBDIR)/alt-java$(DEBUGINFO_EXT) $@
+
+ifeq ($(OPENJDK_TARGET_OS), linux)
+  BUILD_LAUNCHERS += $(JDK_OUTPUTDIR)/bin$(OUTPUT_SUBDIR)/alt-java$(EXE_SUFFIX)
+  ifeq ($(ENABLE_DEBUG_SYMBOLS), true)
+    ifneq ($(POST_STRIP_CMD), )
+      ifneq ($(STRIP_POLICY), no_strip)
+        BUILD_LAUNCHERS += $(JDK_OUTPUTDIR)/bin$(OUTPUT_SUBDIR)/alt-java$(DEBUGINFO_EXT)
+      endif
+    endif
+  endif
+endif
+
 ifeq ($(OPENJDK_TARGET_OS), windows)
   $(eval $(call SetupLauncher,javaw, \
       -DJAVAW -DEXPAND_CLASSPATH_WILDCARDS,,,user32.lib comctl32.lib, \
