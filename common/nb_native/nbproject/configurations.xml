@@ -53,9 +53,6 @@
                   <in>jvmtiEnterTrace.cpp</in>
                 </df>
               </df>
-              <df name="libsystemconf">
-                <in>systemconf.c</in>
-              </df>
             </df>
           </df>
           <df name="jdk">
@@ -12771,11 +12768,6 @@
             flavor2="0">
       </item>
       <item path="../../jdk/src/share/native/java/security/AccessController.c"
-            ex="false"
-            tool="0"
-            flavor2="0">
-      </item>
-      <item path="../../jdk/src/solaris/native/java/security/systemconf.c"
             ex="false"
             tool="0"
             flavor2="0">
