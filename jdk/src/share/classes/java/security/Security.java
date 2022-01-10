@@ -30,6 +30,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.io.*;
 import java.net.URL;
+import sun.misc.SharedSecrets;
+import sun.misc.JavaSecuritySystemConfiguratorAccess;
 import sun.security.util.Debug;
 import sun.security.util.PropertyExpander;
 
@@ -69,6 +71,15 @@ public final class Security {
     }
 
     static {
+        // Initialise here as used by code with system properties disabled
+        SharedSecrets.setJavaSecuritySystemConfiguratorAccess(
+            new JavaSecuritySystemConfiguratorAccess() {
+                @Override
+                public boolean isSystemFipsEnabled() {
+                    return SystemConfigurator.isSystemFipsEnabled();
+                }
+            });
+
         // doPrivileged here because there are multiple
         // things in initialize that might require privs.
         // (the FileInputStream call and the File.exists call,
