@@ -117,16 +117,16 @@ void MemProfiler::do_trace() {
   }
 
   // Print trace line in log
-  fprintf(_log_fp, "%6.1f,%5d,%5d," UINTX_FORMAT_W(6) "," UINTX_FORMAT_W(6) ",",
+  fprintf(_log_fp, "%6.1f,%5d,%5d," SIZE_FORMAT_W(6) "," SIZE_FORMAT_W(6) ",",
           os::elapsedTime(),
           Threads::number_of_threads(),
           SystemDictionary::number_of_classes(),
           Universe::heap()->used() / K,
           Universe::heap()->capacity() / K);
 
-  fprintf(_log_fp, UINTX_FORMAT_W(6) ",", CodeCache::capacity() / K);
+  fprintf(_log_fp, SIZE_FORMAT_W(6) ",", CodeCache::capacity() / K);
 
-  fprintf(_log_fp, UINTX_FORMAT_W(6) "," UINTX_FORMAT_W(6) "," UINTX_FORMAT_W(6) "\n",
+  fprintf(_log_fp, SIZE_FORMAT_W(6) "," SIZE_FORMAT_W(6) "," SIZE_FORMAT_W(6) "\n",
           handles_memory_usage / K,
           resource_memory_usage / K,
           OopMapCache::memory_usage() / K);
