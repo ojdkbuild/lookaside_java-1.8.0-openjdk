@@ -180,11 +180,6 @@ policy.ignoreIdentityScope=false
 keystore.type=jks
 
 #
-# Default keystore type used when global crypto-policies are set to FIPS.
-#
-fips.keystore.type=PKCS11
-
-#
 # Controls compatibility mode for the JKS keystore type.
 #
 # When set to 'true', the JKS keystore type supports loading
