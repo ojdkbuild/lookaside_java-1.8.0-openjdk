@@ -27,4 +27,5 @@ package sun.misc;
 
 public interface JavaSecuritySystemConfiguratorAccess {
     boolean isSystemFipsEnabled();
+    boolean isPlainKeySupportEnabled();
 }
