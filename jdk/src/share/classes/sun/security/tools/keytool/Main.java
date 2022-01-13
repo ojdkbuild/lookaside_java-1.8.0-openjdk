@@ -129,6 +129,7 @@ public final class Main {
     private String infilename = null;
     private String outfilename = null;
     private String srcksfname = null;
+    private boolean systemLineEndings = false;
 
     // User-specified providers are added before any command is called.
     // However, they are not removed before the end of the main() method.
@@ -195,7 +196,7 @@ public final class Main {
         CERTREQ("Generates.a.certificate.request",
             ALIAS, SIGALG, FILEOUT, KEYPASS, KEYSTORE, DNAME,
             STOREPASS, STORETYPE, PROVIDERNAME, PROVIDERCLASS,
-            PROVIDERARG, PROVIDERPATH, V, PROTECTED),
+            PROVIDERARG, PROVIDERPATH, SYSTEMLINEENDINGS, V, PROTECTED),
         CHANGEALIAS("Changes.an.entry.s.alias",
             ALIAS, DESTALIAS, KEYPASS, KEYSTORE, STOREPASS,
             STORETYPE, PROVIDERNAME, PROVIDERCLASS, PROVIDERARG,
@@ -328,6 +329,7 @@ public final class Main {
         STARTDATE("startdate", "<startdate>", "certificate.validity.start.date.time"),
         STOREPASS("storepass", "<arg>", "keystore.password"),
         STORETYPE("storetype", "<storetype>", "keystore.type"),
+        SYSTEMLINEENDINGS("systemlineendings", null, "system.line.endings"),
         TRUSTCACERTS("trustcacerts", null, "trust.certificates.from.cacerts"),
         V("v", null, "verbose.output"),
         VALIDITY("validity", "<valDays>", "validity.number.of.days");
@@ -568,6 +570,8 @@ public final class Main {
                 protectedPath = true;
             } else if (collator.compare(flags, "-srcprotected") == 0) {
                 srcprotectedPath = true;
+            } else if (collator.compare(flags, "-systemlineendings") == 0) {
+                systemLineEndings = true;
             } else  {
                 System.err.println(rb.getString("Illegal.option.") + flags);
                 tinyHelp();
@@ -1468,7 +1472,7 @@ public final class Main {
 
         // Sign the request and base-64 encode it
         request.encodeAndSign(subject, signature);
-        request.print(out);
+        request.print(out, systemLineEndings);
 
         checkWeak(rb.getString("the.generated.certificate.request"), request);
     }
@@ -4578,4 +4582,3 @@ class Pair<A, B> {
         return new Pair<>(a,b);
     }
 }
-
