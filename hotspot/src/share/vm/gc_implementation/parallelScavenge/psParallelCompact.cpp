@@ -912,7 +912,7 @@ void PSParallelCompact::initialize_space_info()
 
 void PSParallelCompact::initialize_dead_wood_limiter()
 {
-  const size_t max = 100;
+  const uintx max = 100;
   _dwl_mean = double(MIN2(ParallelOldDeadWoodLimiterMean, max)) / 100.0;
   _dwl_std_dev = double(MIN2(ParallelOldDeadWoodLimiterStdDev, max)) / 100.0;
   _dwl_first_term = 1.0 / (sqrt(2.0 * M_PI) * _dwl_std_dev);
