@@ -77,6 +77,14 @@ security.provider.9=sun.security.smartcardio.SunPCSC
 #security.provider.10=sun.security.pkcs11.SunPKCS11 ${java.home}/lib/security/nss.cfg
 
 #
+# Security providers used when global crypto-policies are set to FIPS.
+#
+fips.provider.1=sun.security.pkcs11.SunPKCS11 ${java.home}/lib/security/nss.fips.cfg
+fips.provider.2=sun.security.provider.Sun
+fips.provider.3=sun.security.ec.SunEC
+fips.provider.4=com.sun.net.ssl.internal.ssl.Provider SunPKCS11-NSS-FIPS
+
+#
 # Sun Provider SecureRandom seed source.
 #
 # Select the primary source of seed data for the "SHA1PRNG" and
