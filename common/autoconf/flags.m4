@@ -445,21 +445,6 @@ AC_DEFUN_ONCE([FLAGS_SETUP_COMPILER_FLAGS_FOR_JDK],
     AC_SUBST($2CXXSTD_CXXFLAG)
   fi
 
-  #
-  # NOTE: check for -mstackrealign needs to be below potential addition of -m32
-  #
-  if test "x$OPENJDK_TARGET_CPU" = xx86 && test "x$OPENJDK_TARGET_OS" = xmacosx -o \
-                                                "x$OPENJDK_TARGET_OS" = xlinux; then
-    # On 32-bit MacOSX the OS requires C-entry points to be 16 byte aligned.
-    # While waiting for a better solution, the current workaround is to use -mstackrealign
-    # This is also required on Linux systems which use libraries compiled with SSE instructions
-    REALIGN_CFLAG="-mincoming-stack-boundary=2 -mpreferred-stack-boundary=4"
-    FLAGS_COMPILER_CHECK_ARGUMENTS([$REALIGN_CFLAG -Werror], [],
-      AC_MSG_ERROR([The selected compiler $CXX does not support -mstackrealign! Try to put another compiler in the path.])
-    )
-    AC_SUBST([REALIGN_CFLAG])
-  fi
-
   if test "x$CFLAGS" != "x${ADDED_CFLAGS}"; then
     AC_MSG_WARN([Ignoring CFLAGS($CFLAGS) found in environment. Use --with-extra-cflags])
   fi
