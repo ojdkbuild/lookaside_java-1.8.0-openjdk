@@ -31,6 +31,7 @@ import java.security.*;
 import java.security.cert.*;
 import java.util.*;
 import javax.net.ssl.*;
+import sun.misc.SharedSecrets;
 import sun.security.action.GetPropertyAction;
 import sun.security.provider.certpath.AlgorithmChecker;
 import sun.security.validator.Validator;
@@ -539,20 +540,38 @@ public abstract class SSLContextImpl extends SSLContextSpi {
 
         static {
             if (SunJSSE.isFIPS()) {
-                supportedProtocols = Arrays.asList(
-                    ProtocolVersion.TLS13,
-                    ProtocolVersion.TLS12,
-                    ProtocolVersion.TLS11,
-                    ProtocolVersion.TLS10
-                );
+                if (SharedSecrets.getJavaSecuritySystemConfiguratorAccess()
+                        .isSystemFipsEnabled()) {
+                    // RH1860986: TLSv1.3 key derivation not supported with
+                    // the Security Providers available in system FIPS mode.
+                    supportedProtocols = Arrays.asList(
+                        ProtocolVersion.TLS12,
+                        ProtocolVersion.TLS11,
+                        ProtocolVersion.TLS10
+                    );
 
-                serverDefaultProtocols = getAvailableProtocols(
-                        new ProtocolVersion[] {
-                    ProtocolVersion.TLS13,
-                    ProtocolVersion.TLS12,
-                    ProtocolVersion.TLS11,
-                    ProtocolVersion.TLS10
-                });
+                    serverDefaultProtocols = getAvailableProtocols(
+                            new ProtocolVersion[] {
+                        ProtocolVersion.TLS12,
+                        ProtocolVersion.TLS11,
+                        ProtocolVersion.TLS10
+                    });
+                } else {
+                    supportedProtocols = Arrays.asList(
+                        ProtocolVersion.TLS13,
+                        ProtocolVersion.TLS12,
+                        ProtocolVersion.TLS11,
+                        ProtocolVersion.TLS10
+                    );
+
+                    serverDefaultProtocols = getAvailableProtocols(
+                            new ProtocolVersion[] {
+                        ProtocolVersion.TLS13,
+                        ProtocolVersion.TLS12,
+                        ProtocolVersion.TLS11,
+                        ProtocolVersion.TLS10
+                    });
+                }
             } else {
                 supportedProtocols = Arrays.asList(
                     ProtocolVersion.TLS13,
@@ -612,6 +631,16 @@ public abstract class SSLContextImpl extends SSLContextSpi {
 
         static ProtocolVersion[] getSupportedProtocols() {
             if (SunJSSE.isFIPS()) {
+                if (SharedSecrets.getJavaSecuritySystemConfiguratorAccess()
+                        .isSystemFipsEnabled()) {
+                    // RH1860986: TLSv1.3 key derivation not supported with
+                    // the Security Providers available in system FIPS mode.
+                    return new ProtocolVersion[] {
+                            ProtocolVersion.TLS12,
+                            ProtocolVersion.TLS11,
+                            ProtocolVersion.TLS10
+                    };
+                }
                 return new ProtocolVersion[] {
                         ProtocolVersion.TLS13,
                         ProtocolVersion.TLS12,
@@ -939,6 +968,16 @@ public abstract class SSLContextImpl extends SSLContextSpi {
 
         static ProtocolVersion[] getProtocols() {
             if (SunJSSE.isFIPS()) {
+                if (SharedSecrets.getJavaSecuritySystemConfiguratorAccess()
+                        .isSystemFipsEnabled()) {
+                    // RH1860986: TLSv1.3 key derivation not supported with
+                    // the Security Providers available in system FIPS mode.
+                    return new ProtocolVersion[] {
+                            ProtocolVersion.TLS12,
+                            ProtocolVersion.TLS11,
+                            ProtocolVersion.TLS10
+                    };
+                }
                 return new ProtocolVersion[]{
                         ProtocolVersion.TLS12,
                         ProtocolVersion.TLS11,
