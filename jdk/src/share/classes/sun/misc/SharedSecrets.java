@@ -31,6 +31,7 @@ import java.io.Console;
 import java.io.FileDescriptor;
 import java.io.ObjectInputStream;
 import java.security.ProtectionDomain;
+import java.security.Security;
 import java.security.Signature;
 
 import java.security.AccessController;
@@ -255,6 +256,9 @@ public class SharedSecrets {
     }
 
     public static JavaSecuritySystemConfiguratorAccess getJavaSecuritySystemConfiguratorAccess() {
+        if (javaSecuritySystemConfiguratorAccess == null) {
+            unsafe.ensureClassInitialized(Security.class);
+        }
         return javaSecuritySystemConfiguratorAccess;
     }
 }
