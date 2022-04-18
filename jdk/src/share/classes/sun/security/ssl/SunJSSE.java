@@ -30,8 +30,6 @@ import static sun.security.util.SecurityConstants.PROVIDER_VER;
 
 import java.security.*;
 
-import sun.misc.SharedSecrets;
-
 /**
  * The JSSE provider.
  *
@@ -217,13 +215,8 @@ public abstract class SunJSSE extends java.security.Provider {
             "sun.security.ssl.SSLContextImpl$TLS11Context");
         put("SSLContext.TLSv1.2",
             "sun.security.ssl.SSLContextImpl$TLS12Context");
-        if (!SharedSecrets.getJavaSecuritySystemConfiguratorAccess()
-                .isSystemFipsEnabled()) {
-            // RH1860986: TLSv1.3 key derivation not supported with
-            // the Security Providers available in system FIPS mode.
-            put("SSLContext.TLSv1.3",
-                "sun.security.ssl.SSLContextImpl$TLS13Context");
-        }
+        put("SSLContext.TLSv1.3",
+            "sun.security.ssl.SSLContextImpl$TLS13Context");
         put("SSLContext.TLS",
             "sun.security.ssl.SSLContextImpl$TLSContext");
         if (isfips == false) {
