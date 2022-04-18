@@ -68,7 +68,7 @@ final class TrustStoreManager {
      * The preference of the default trusted KeyStore is:
      *    javax.net.ssl.trustStore
      *    jssecacerts
-     *    cacerts
+     *    cacerts (system and local)
      */
     private static final class TrustStoreDescriptor {
         private static final String fileSep = File.separator;
@@ -79,6 +79,10 @@ final class TrustStoreManager {
                 defaultStorePath + fileSep + "cacerts";
         private static final String jsseDefaultStore =
                 defaultStorePath + fileSep + "jssecacerts";
+        /* Check system cacerts DB: /etc/pki/java/cacerts */
+        private static final String systemStore =
+                fileSep + "etc" + fileSep + "pki" +
+                fileSep + "java" + fileSep + "cacerts";
 
         // the trust store name
         private final String storeName;
@@ -144,7 +148,8 @@ final class TrustStoreManager {
                     long temporaryTime = 0L;
                     if (!"NONE".equals(storePropName)) {
                         String[] fileNames =
-                                new String[] {storePropName, defaultStore};
+                                new String[] {storePropName,
+                                              systemStore, defaultStore};
                         for (String fileName : fileNames) {
                             File f = new File(fileName);
                             if (f.isFile() && f.canRead()) {
