@@ -155,7 +155,7 @@ public:
 private:
            size_t _initial_size;
            size_t _minimum_size;
-  volatile size_t _soft_max_size;
+  volatile jlong  _soft_max_size;
   shenandoah_padding(0);
   volatile jlong  _used;
   volatile size_t _committed;

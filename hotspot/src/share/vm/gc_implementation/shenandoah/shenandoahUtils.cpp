@@ -150,5 +150,5 @@ size_t ShenandoahUtils::round_up_power_of_2(size_t value) {
     return value;
   }
 
-  return (size_t)1 << (log2_intptr(value) + 1);
+  return (size_t)1 << (log2_intptr((uintptr_t) value) + 1);
 }
