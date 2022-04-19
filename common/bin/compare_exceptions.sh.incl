@@ -280,7 +280,6 @@ ACCEPTED_SMALL_SIZE_DIFF="
 ./jre/lib/i386/libsplashscreen.so
 ./jre/lib/i386/libsunec.so
 ./jre/lib/i386/libsunwjdga.so
-./jre/lib/i386/libsystemconf.so
 ./jre/lib/i386/libt2k.so
 ./jre/lib/i386/libunpack.so
 ./jre/lib/i386/libverify.so
@@ -434,7 +433,6 @@ ACCEPTED_SMALL_SIZE_DIFF="
 ./jre/lib/amd64/libsplashscreen.so
 ./jre/lib/amd64/libsunec.so
 ./jre/lib/amd64/libsunwjdga.so
-//jre/lib/amd64/libsystemconf.so
 ./jre/lib/amd64/libt2k.so
 ./jre/lib/amd64/libunpack.so
 ./jre/lib/amd64/libverify.so
@@ -589,7 +587,6 @@ ACCEPTED_SMALL_SIZE_DIFF="
 ./jre/lib/sparc/libsplashscreen.so
 ./jre/lib/sparc/libsunec.so
 ./jre/lib/sparc/libsunwjdga.so
-./jre/lib/sparc/libsystemconf.so
 ./jre/lib/sparc/libt2k.so
 ./jre/lib/sparc/libunpack.so
 ./jre/lib/sparc/libverify.so
@@ -744,7 +741,6 @@ ACCEPTED_SMALL_SIZE_DIFF="
 ./jre/lib/sparcv9/libsplashscreen.so
 ./jre/lib/sparcv9/libsunec.so
 ./jre/lib/sparcv9/libsunwjdga.so
-./jre/lib/sparcv9/libsystemconf.so
 ./jre/lib/sparcv9/libt2k.so
 ./jre/lib/sparcv9/libunpack.so
 ./jre/lib/sparcv9/libverify.so
