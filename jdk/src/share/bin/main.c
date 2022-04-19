@@ -32,6 +32,14 @@
 
 #include "defines.h"
 
+#ifdef REDHAT_ALT_JAVA
+#if defined(__linux__) && defined(__x86_64__)
+#include "alt_main.h"
+#else
+#warning alt-java requested but SSB mitigation not available on this platform.
+#endif
+#endif
+
 #ifdef _MSC_VER
 #if _MSC_VER > 1400 && _MSC_VER < 1600
 
